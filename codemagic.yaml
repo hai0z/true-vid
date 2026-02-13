@@ -1,0 +1,99 @@
+workflows:
+  react-native-ios-unsigned:
+    name: React Native iOS (Unsigned)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        XCODE_SCHEME: "YourApp" # Thay tên app của bạn
+        BUNDLE_ID: "com.yourcompany.yourapp" # Thay bundle ID của bạn
+      node: 18
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+      
+      - name: Run Expo Prebuild
+        script: |
+          npx expo prebuild --clean
+      
+      - name: Set Info.plist values
+        script: |
+          PLIST=$CM_BUILD_DIR/ios/$XCODE_SCHEME/Info.plist
+          PLIST_BUDDY=/usr/libexec/PlistBuddy
+          $PLIST_BUDDY -c "Add :ITSAppUsesNonExemptEncryption bool false" $PLIST
+      
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios && pod install
+      
+      - name: Build iOS app without signing
+        script: |
+          xcodebuild -workspace ios/$XCODE_SCHEME.xcworkspace \
+            -scheme $XCODE_SCHEME \
+            -configuration Release \
+            -derivedDataPath ios/build \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM=""
+      
+      - name: Create unsigned IPA
+        script: |
+          cd ios/build/Build/Products/Release-iphoneos
+          mkdir Payload
+          cp -r *.app Payload/
+          zip -r $CM_BUILD_DIR/app-unsigned.ipa Payload
+          rm -rf Payload
+          echo "✅ IPA created: app-unsigned.ipa"
+    
+    artifacts:
+      - app-unsigned.ipa
+      - ios/build/Build/Products/Release-iphoneos/*.app
+    
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: true
+          failure: true
+
+  react-native-android-unsigned:
+    name: React Native Android (Unsigned)
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      vars:
+        PACKAGE_NAME: "com.yourcompany.yourapp"
+      node: 18
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+      
+      - name: Run Expo Prebuild
+        script: |
+          npx expo prebuild --clean
+      
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+      
+      - name: Build Android APK (unsigned)
+        script: |
+          cd android
+          ./gradlew assembleRelease
+    
+    artifacts:
+      - android/app/build/outputs/**/*.apk
+      - android/app/build/outputs/**/*.aab
+    
+    publishing:
+      email:
+        recipients:
+          - your-email@example.com
+        notify:
+          success: true
+          failure: true
