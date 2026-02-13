@@ -7,7 +7,7 @@ workflows:
       vars:
         XCODE_SCHEME: "truevid"
         BUNDLE_ID: "com.hai0z.truevid"
-      node: 18
+      node: 20
     scripts:
       - name: Install npm dependencies
         script: |
@@ -67,7 +67,7 @@ workflows:
     environment:
       vars:
         PACKAGE_NAME: "com.hai0z.truevid"
-      node: 18
+      node: 20
     scripts:
       - name: Install npm dependencies
         script: |
