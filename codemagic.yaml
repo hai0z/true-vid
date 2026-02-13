@@ -5,8 +5,8 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       vars:
-        XCODE_SCHEME: "YourApp" # Thay tên app của bạn
-        BUNDLE_ID: "com.yourcompany.yourapp" # Thay bundle ID của bạn
+        XCODE_SCHEME: "truevid"
+        BUNDLE_ID: "com.hai0z.truevid"
       node: 18
     scripts:
       - name: Install npm dependencies
@@ -55,7 +55,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - your-email@example.com
+          - hainguyen56211@gmail.com
         notify:
           success: true
           failure: true
@@ -66,7 +66,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       vars:
-        PACKAGE_NAME: "com.yourcompany.yourapp"
+        PACKAGE_NAME: "com.hai0z.truevid"
       node: 18
     scripts:
       - name: Install npm dependencies
@@ -93,7 +93,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - your-email@example.com
+          - hainguyen56211@gmail.com
         notify:
           success: true
           failure: true
