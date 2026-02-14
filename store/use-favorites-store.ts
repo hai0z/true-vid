@@ -19,7 +19,7 @@ export const useFavoritesStore = create<FavoritesState>()(
       favorites: [],
       addFavorite: (movie) =>
         set((state) => ({
-          favorites: [...state.favorites, movie],
+          favorites: [movie,...state.favorites],
         })),
       removeFavorite: (movieId) =>
         set((state) => ({

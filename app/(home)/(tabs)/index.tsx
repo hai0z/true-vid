@@ -133,12 +133,6 @@ export default function MoviesScreen() {
                       colors={['#FF6B6B', '#EE5A24']}
                       style={styles.sectionIndicator}
                     />
-                    <Ionicons
-                      name="time-outline"
-                      size={20}
-                      color="#FF6B6B"
-                      style={styles.sectionIcon}
-                    />
                     <ThemedText type="subtitle" style={styles.sectionTitle}>
                       Xem gần đây
                     </ThemedText>
@@ -164,14 +158,20 @@ export default function MoviesScreen() {
                   snapToInterval={HISTORY_CARD_WIDTH + 12}
                 >
                   {history.slice(0, 10).map((item, index) => (
-                    <HistoryCard
+                    <View
                       key={item.movie.id}
-                      title={item.movie.name}
-                      thumbnail={item.movie.thumb_url}
-                      position={item.position}
-                      duration={item.duration}
-                      onPress={() => router.push(`/(home)/player/${item.movie.slug}` as any)}
-                    />
+                      style={[
+                        index === 0 && { marginLeft: 12 },
+                      ]}
+                    >
+                      <HistoryCard
+                        title={item.movie.name}
+                        thumbnail={item.movie.thumb_url}
+                        position={item.position}
+                        duration={item.duration}
+                        onPress={() => router.push(`/(home)/player/${item.movie.slug}` as any)}
+                      />
+                    </View>
                   ))}
                 </ScrollView>
               </View>
@@ -187,12 +187,6 @@ export default function MoviesScreen() {
                         <LinearGradient
                           colors={['#FF6B6B', '#EE5A24']}
                           style={styles.sectionIndicator}
-                        />
-                        <Ionicons
-                          name={category.icon as any}
-                          size={20}
-                          color="#FF6B6B"
-                          style={styles.sectionIcon}
                         />
                         <ThemedText type="subtitle" style={styles.sectionTitle}>
                           {category.name}
@@ -231,7 +225,7 @@ export default function MoviesScreen() {
                           key={movie.id}
                           style={[
                             styles.movieCardWrapper,
-                            movieIndex === 0 && { marginLeft: 16 },
+                           
                           ]}
                         >
                           <MovieCard
@@ -334,7 +328,6 @@ const styles = StyleSheet.create({
   // ─── Loading ──────────────────────────
   loadingContainer: {
     flex: 1,
-    paddingTop: 200,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 16,

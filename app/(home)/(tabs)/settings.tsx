@@ -2,13 +2,23 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRef, useState } from 'react';
+import { Animated, Pressable, StyleSheet, Switch, View } from 'react-native';
 
 export default function SettingsScreen() {
   const [notifications, setNotifications] = useState(true);
   const [autoPlay, setAutoPlay] = useState(false);
   const colorScheme = useColorScheme();
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  const headerBgOpacity = scrollY.interpolate({
+    inputRange: [0, 150],
+    outputRange: [0.3, 0.5],
+    extrapolate: 'clamp',
+  });
 
   const settingsSections = [
     {
@@ -55,11 +65,40 @@ export default function SettingsScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Cài đặt</ThemedText>
-      </ThemedView>
+      {/* Animated Blur Header */}
+      <Animated.View style={styles.headerWrapper}>
+        <BlurView intensity={90} tint="dark" style={styles.header}>
+          <Animated.View style={[styles.headerBg, { opacity: headerBgOpacity }]} />
+          <View style={styles.headerContent}>
+            <View style={styles.headerLeft}>
+              <View style={styles.logoContainer}>
+                <LinearGradient
+                  colors={['#FF6B6B', '#EE5A24']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={styles.logoBadge}
+                >
+                  <Ionicons name="settings" size={16} color="#fff" />
+                </LinearGradient>
+                <ThemedText type="title" style={styles.headerTitle}>
+                  Cài đặt
+                </ThemedText>
+              </View>
+            </View>
+          </View>
+        </BlurView>
+      </Animated.View>
       
-      <ScrollView style={styles.content}>
+      <Animated.ScrollView
+        style={styles.content}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
+        contentContainerStyle={styles.scrollContent}
+      >
         {settingsSections.map((section, sectionIndex) => (
           <ThemedView key={sectionIndex} style={styles.section}>
             <ThemedText style={styles.sectionTitle}>{section.title}</ThemedText>
@@ -92,21 +131,65 @@ export default function SettingsScreen() {
         <Pressable style={styles.logoutButton}>
           <ThemedText style={styles.logoutText}>Đăng xuất</ThemedText>
         </Pressable>
-      </ScrollView>
+      </Animated.ScrollView>
     </ThemedView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    padding: 16,
-    paddingTop: 60,
+  // ─── Header ───────────────────────────
+  headerWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
   },
+  header: {
+    overflow: 'hidden',
+  },
+  headerBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 56,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  logoBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.5,
+  },
+  // ─── Content ──────────────────────────
   content: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingTop: 108,
   },
   section: {
     marginBottom: 24,

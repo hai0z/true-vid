@@ -1,137 +1,627 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Keyboard,
+  Platform,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native';
+
+import { MovieCard } from '@/components/movie-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import moviesData from '@/constants/movies.json';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Movie } from '@/types/Movie';
 
+// ─── Constants ────────────────────────────────────────────
+const SEARCH_HISTORY_KEY = 'movie_search_history';
+const MAX_HISTORY = 10;
+const DEBOUNCE_MS = 300;
+
+// ─── Helpers ──────────────────────────────────────────────
+
+/** Bỏ dấu tiếng Việt + lowercase để so khớp tốt hơn */
+function normalize(str: string): string {
+  return str
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D');
+}
+
+/** Cho điểm relevance – điểm càng cao càng khớp */
+function scoreMovie(movie: Movie, raw: string): number {
+  const q = normalize(raw);
+  if (!q) return 0;
+
+  let score = 0;
+  const name = normalize(movie.name);
+
+  // ── Name matches (quan trọng nhất) ──
+  if (name === q) score += 100;
+  else if (name.startsWith(q)) score += 80;
+  else if (name.includes(` ${q}`)) score += 60; // word boundary
+  else if (name.includes(q)) score += 40;
+
+  // ── Actor match ──
+  if (movie.actors.some((a) => normalize(a).includes(q))) score += 30;
+
+  // ── Category match ──
+  if (movie.categories.some((c) => normalize(c.name).includes(q)))
+    score += 20;
+
+  // ── Content / description match ──
+  if (normalize(movie.content).includes(q)) score += 10;
+
+  return score;
+}
+
+// ─── Custom hooks ─────────────────────────────────────────
+
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(id);
+  }, [value, delay]);
+  return debounced;
+}
+
+// ─── Component ────────────────────────────────────────────
 
 export default function SearchScreen() {
-  const [searchQuery, setSearchQuery] = useState('');
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const movies = moviesData as Movie[];
 
-  return (
-    <ThemedView style={styles.container}>
-      <ThemedView style={styles.header}>
-        <ThemedText type="title">Tìm kiếm</ThemedText>
-      </ThemedView>
-      
-      <ThemedView style={styles.searchContainer}>
-        <View style={[
-          styles.searchBox,
-          { backgroundColor: isDark ? '#333' : '#f0f0f0' }
-        ]}>
-          <IconSymbol name="magnifyingglass" size={20} color="#666" />
-          <TextInput
-            style={[
-              styles.searchInput,
-              { color: isDark ? '#fff' : '#000' }
-            ]}
-            placeholder="Tìm kiếm phim..."
-            placeholderTextColor="#666"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
+  // ── State ──
+  const [query, setQuery] = useState('');
+  const [focused, setFocused] = useState(false);
+  const [history, setHistory] = useState<string[]>([]);
+  const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
+
+  // ── Refs ──
+  const inputRef = useRef<TextInput>(null);
+  const borderAnim = useRef(new Animated.Value(0)).current;
+  const scrollY = useRef(new Animated.Value(0)).current;
+
+  // ── Colors ──
+  const C = useMemo(
+    () => ({
+      bg: isDark ? '#151718' : '#ffffff',
+      headerBg: isDark ? '#151718' : '#ffffff',
+      card: isDark ? 'rgba(255,255,255,0.08)' : '#f4f4f8',
+      border: isDark ? 'rgba(255,255,255,0.1)' : '#e2e2e8',
+      accent: isDark ? '#FF6B6B' : '#EE5A24',
+      accentSoft: isDark ? 'rgba(255,107,107,0.12)' : 'rgba(238,90,36,0.12)',
+      muted: isDark ? 'rgba(255,255,255,0.5)' : '#9e9eaf',
+      text: isDark ? '#fff' : '#1a1a2e',
+      tagBg: isDark ? 'rgba(255,255,255,0.08)' : '#ededf4',
+    }),
+    [isDark],
+  );
+
+  // ── Animate border on focus ──
+  const animateFocus = (toValue: number) =>
+    Animated.spring(borderAnim, {
+      toValue,
+      useNativeDriver: false,
+      tension: 60,
+      friction: 9,
+    }).start();
+
+  const borderColor = borderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [C.border, C.accent],
+  });
+
+  const headerBgOpacity = scrollY.interpolate({
+    inputRange: [0, 150],
+    outputRange: [0.3, 0.5],
+    extrapolate: 'clamp',
+  });
+
+  // ── History CRUD ──
+  useEffect(() => {
+    AsyncStorage.getItem(SEARCH_HISTORY_KEY).then((raw) => {
+      if (raw) setHistory(JSON.parse(raw));
+    });
+  }, []);
+
+  const persistHistory = useCallback(async (next: string[]) => {
+    setHistory(next);
+    await AsyncStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(next));
+  }, []);
+
+  const addHistory = useCallback(
+    (term: string) => {
+      const t = term.trim();
+      if (!t) return;
+      persistHistory([t, ...history.filter((h) => h !== t)].slice(0, MAX_HISTORY));
+    },
+    [history, persistHistory],
+  );
+
+  const removeHistory = useCallback(
+    (term: string) => persistHistory(history.filter((h) => h !== term)),
+    [history, persistHistory],
+  );
+
+  const clearAllHistory = useCallback(() => persistHistory([]), [persistHistory]);
+
+  // ── Suggested categories ──
+  const popularCategories = useMemo(() => {
+    const map = new Map<string, number>();
+    movies.forEach((m) =>
+      m.categories.forEach((c) => map.set(c.name, (map.get(c.name) ?? 0) + 1)),
+    );
+    return [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name]) => name);
+  }, [movies]);
+
+  // ── Filtered + scored results ──
+  const results = useMemo(() => {
+    const q = debouncedQuery.trim();
+    if (!q) return [];
+    return movies
+      .map((m) => ({ movie: m, score: scoreMovie(m, q) }))
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((r) => r.movie);
+  }, [debouncedQuery, movies]);
+
+  // ── Handlers ──
+  const onMoviePress = (slug: string) => {
+    addHistory(query.trim());
+    Keyboard.dismiss();
+    router.push(`/(home)/movie/${slug}`);
+  };
+
+  const clearQuery = () => {
+    setQuery('');
+    inputRef.current?.focus();
+  };
+
+  const cancel = () => {
+    setQuery('');
+    Keyboard.dismiss();
+    inputRef.current?.blur();
+  };
+
+  const onSubmit = () => {
+    if (query.trim()) addHistory(query.trim());
+    Keyboard.dismiss();
+  };
+
+  // ── Render helpers ──
+  const renderSearchBar = () => (
+    <Animated.View style={styles.headerWrapper}>
+      <BlurView intensity={90} tint="dark" style={styles.header}>
+        <Animated.View style={[styles.headerBg, { opacity: headerBgOpacity }]} />
+        <View style={styles.headerContent}>
+          <View style={styles.headerLeft}>
+            <View style={styles.logoContainer}>
+              <LinearGradient
+                colors={['#FF6B6B', '#EE5A24']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.logoBadge}
+              >
+                <IconSymbol name="magnifyingglass" size={16} color="#fff" />
+              </LinearGradient>
+              <ThemedText type="title" style={styles.headerTitle}>
+                Tìm kiếm
+              </ThemedText>
+            </View>
+          </View>
         </View>
-      </ThemedView>
-      
-      <ScrollView style={styles.content}>
-        {searchQuery ? (
-          <ThemedView style={styles.results}>
-            {[1, 2, 3, 4].map((item) => (
-              <Pressable key={item} style={styles.resultItem}>
-                <View style={styles.resultPoster}>
-                  <IconSymbol name="film" size={30} color="#666" />
-                </View>
-                <ThemedView style={styles.resultInfo}>
-                  <ThemedText style={styles.resultTitle}>
-                    Kết quả {item}
-                  </ThemedText>
-                  <ThemedText style={styles.resultMeta}>
-                    2024 • Hành động
-                  </ThemedText>
-                </ThemedView>
-              </Pressable>
-            ))}
-          </ThemedView>
-        ) : (
-          <ThemedView style={styles.emptyState}>
-            <IconSymbol name="magnifyingglass" size={60} color="#666" />
-            <ThemedText style={styles.emptyText}>
-              Nhập từ khóa để tìm kiếm phim
+
+        <View style={styles.searchContainer}>
+          <View style={styles.searchRow}>
+            <Animated.View
+              style={[
+                styles.searchBox,
+                {
+                  backgroundColor: C.card,
+                  borderColor,
+                  flex: 1,
+                },
+              ]}>
+              <IconSymbol
+                name="magnifyingglass"
+                size={18}
+                color={focused ? C.accent : C.muted}
+              />
+              <TextInput
+                ref={inputRef}
+                style={[styles.input, { color: C.text }]}
+                placeholder="Phim, diễn viên, thể loại…"
+                placeholderTextColor={C.muted}
+                value={query}
+                onChangeText={setQuery}
+                onFocus={() => {
+                  setFocused(true);
+                  animateFocus(1);
+                }}
+                onBlur={() => {
+                  setFocused(false);
+                  animateFocus(0);
+                }}
+                onSubmitEditing={onSubmit}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {query.length > 0 && (
+                <TouchableOpacity onPress={clearQuery} hitSlop={12}>
+                  <IconSymbol name="xmark.circle.fill" size={18} color={C.muted} />
+                </TouchableOpacity>
+              )}
+            </Animated.View>
+
+            {focused && (
+              <TouchableOpacity onPress={cancel} style={styles.cancelBtn}>
+                <ThemedText style={[styles.cancelTxt, { color: C.accent }]}>
+                  Huỷ
+                </ThemedText>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      </BlurView>
+    </Animated.View>
+  );
+
+  const renderIdleContent = () => (
+    <View style={styles.idleWrap}>
+      {/* ── Recent searches ── */}
+      {history.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionRow}>
+            <ThemedText style={[styles.sectionTitle, { color: C.text }]}>
+              Gần đây
             </ThemedText>
-          </ThemedView>
-        )}
-      </ScrollView>
+            <TouchableOpacity onPress={clearAllHistory}>
+              <ThemedText style={[styles.clearAll, { color: C.accent }]}>
+                Xoá tất cả
+              </ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          {history.map((h, i) => (
+            <TouchableOpacity
+              key={`h-${i}`}
+              style={[styles.historyRow, { borderBottomColor: C.border }]}
+              activeOpacity={0.6}
+              onPress={() => setQuery(h)}>
+              <IconSymbol name="clock" size={16} color={C.muted} />
+              <ThemedText
+                style={[styles.historyTxt, { color: C.text }]}
+                numberOfLines={1}>
+                {h}
+              </ThemedText>
+              <TouchableOpacity onPress={() => removeHistory(h)} hitSlop={12}>
+                <IconSymbol name="xmark" size={12} color={C.muted} />
+              </TouchableOpacity>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* ── Popular categories ── */}
+      <View style={styles.section}>
+        <ThemedText style={[styles.sectionTitle, { color: C.text }]}>
+          Thể loại phổ biến
+        </ThemedText>
+        <View style={styles.tags}>
+          {popularCategories.map((cat, i) => (
+            <TouchableOpacity
+              key={`c-${i}`}
+              style={[styles.tag, { backgroundColor: C.accentSoft }]}
+              activeOpacity={0.7}
+              onPress={() => setQuery(cat)}>
+              <ThemedText style={[styles.tagTxt, { color: C.accent }]}>
+                {cat}
+              </ThemedText>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      {/* ── Illustration ── */}
+      {history.length === 0 && (
+        <View style={styles.emptyCenter}>
+          <View
+            style={[styles.emptyCircle, { backgroundColor: C.accentSoft }]}>
+            <IconSymbol name="magnifyingglass" size={36} color={C.accent} />
+          </View>
+          <ThemedText style={[styles.emptyTitle, { color: C.text }]}>
+            Khám phá bộ phim yêu thích
+          </ThemedText>
+          <ThemedText style={[styles.emptySub, { color: C.muted }]}>
+            Tìm theo tên phim, diễn viên hoặc thể loại
+          </ThemedText>
+        </View>
+      )}
+    </View>
+  );
+
+  const renderNoResults = () => (
+    <View style={styles.emptyCenter}>
+      <View style={[styles.emptyCircle, { backgroundColor: C.accentSoft }]}>
+        <IconSymbol name="magnifyingglass" size={36} color={C.muted} />
+      </View>
+      <ThemedText style={[styles.emptyTitle, { color: C.text }]}>
+        Không tìm thấy kết quả
+      </ThemedText>
+      <ThemedText style={[styles.emptySub, { color: C.muted }]}>
+        Thử từ khoá khác hoặc kiểm tra lại chính tả
+      </ThemedText>
+    </View>
+  );
+
+  // ── Main render ──
+  return (
+    <ThemedView style={[styles.container, { backgroundColor: C.bg }]}>
+      {renderSearchBar()}
+
+      {debouncedQuery.trim() ? (
+        results.length > 0 ? (
+          <Animated.FlatList
+            key="results-grid"  
+            data={results}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            contentContainerStyle={styles.grid}
+            columnWrapperStyle={styles.gridRow}
+            showsVerticalScrollIndicator={false}
+            keyboardDismissMode="on-drag"
+            onScroll={Animated.event(
+              [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+              { useNativeDriver: true },
+            )}
+            scrollEventThrottle={16}
+            ListHeaderComponent={
+              <View style={styles.resultBar}>
+                <View style={[styles.resultPill, { backgroundColor: C.accentSoft }]}>
+                  <ThemedText style={[styles.resultTxt, { color: C.accent }]}>
+                    {results.length} kết quả
+                  </ThemedText>
+                </View>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <View style={styles.itemContainer}>
+                <MovieCard
+                  id={item.id}
+                  title={item.name}
+                  poster={item.thumb_url}
+                  variant="grid"
+                  onPress={() => onMoviePress(item.slug)}
+                />
+              </View>
+            )}
+          />
+        ) : (
+          renderNoResults()
+        )
+      ) : (
+        <Animated.FlatList
+          data={[]}
+          renderItem={null}
+          keyboardDismissMode="on-drag"
+          showsVerticalScrollIndicator={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true },
+          )}
+          scrollEventThrottle={16}
+          ListHeaderComponent={renderIdleContent}
+        />
+      )}
     </ThemedView>
   );
 }
+
+// ─── Styles ───────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+
+  /* ── Header / Search bar ── */
+  headerWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+  },
   header: {
-    padding: 16,
-    paddingTop: 60,
+    overflow: 'hidden',
+  },
+  headerBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 56 : 48,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  logoBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.5,
   },
   searchContainer: {
     paddingHorizontal: 16,
-    marginBottom: 16,
+    paddingBottom: 12,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    gap: 8,
+    paddingHorizontal: 14,
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    gap: 10,
   },
-  searchInput: {
+  input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
+    paddingVertical: 0,
   },
-  content: {
-    flex: 1,
+  cancelBtn: {
+    paddingVertical: 8,
+    paddingLeft: 2,
   },
-  results: {
-    padding: 16,
+  cancelTxt: {
+    fontSize: 15,
+    fontWeight: '600',
   },
-  resultItem: {
+
+  /* ── Idle / suggestions ── */
+  idleWrap: {
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 170 : 162,
+  },
+  section: {
+    marginBottom: 28,
+  },
+  sectionRow: {
     flexDirection: 'row',
-    marginBottom: 16,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  clearAll: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  historyTxt: {
+    flex: 1,
+    fontSize: 15,
+  },
+  tags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 4,
+  },
+  tag: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  tagTxt: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  /* ── Results grid ── */
+  grid: {
+    paddingTop: Platform.OS === 'ios' ? 170 : 162,
+    paddingHorizontal: 12,
+    paddingBottom: 30,
     gap: 12,
   },
-  resultPoster: {
+  gridRow: {
+    gap: 12,
+    justifyContent: 'flex-start',
+  },
+  itemContainer: {
+    flex: 1,
+    maxWidth: '50%',
+  },
+  resultBar: {
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+  },
+  resultPill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  resultTxt: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  /* ── Empty states ── */
+  emptyCenter: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 80,
+  },
+  emptyCircle: {
     width: 80,
-    height: 120,
-    backgroundColor: '#333',
-    borderRadius: 8,
-    justifyContent: 'center',
+    height: 80,
+    borderRadius: 40,
     alignItems: 'center',
-  },
-  resultInfo: {
-    flex: 1,
     justifyContent: 'center',
+    marginBottom: 20,
   },
-  resultTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
+  emptyTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 6,
   },
-  resultMeta: {
+  emptySub: {
     fontSize: 14,
-    opacity: 0.6,
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 100,
-  },
-  emptyText: {
-    marginTop: 16,
-    fontSize: 16,
-    opacity: 0.6,
+    textAlign: 'center',
+    paddingHorizontal: 40,
+    lineHeight: 20,
   },
 });

@@ -5,7 +5,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
 
 // Enable network logging in development
 if (__DEV__) {
@@ -17,7 +16,6 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {

@@ -2,18 +2,21 @@ import { MovieCard } from '@/components/movie-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { likeVietSubs } from '@/constants/Data';
 import { useFavoritesStore } from '@/store/use-favorites-store';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useRef } from 'react';
-import { Animated, StyleSheet, View } from 'react-native';
+import { Animated, Button, StyleSheet, View } from 'react-native';
 
+// Gọi hàm này khi cần
 export default function FavoritesScreen() {
   const { favorites } = useFavoritesStore();
   const router = useRouter();
   const scrollY = useRef(new Animated.Value(0)).current;
+const importData = useFavoritesStore((state) => state.importLegacyData);
 
   const headerBgOpacity = scrollY.interpolate({
     inputRange: [0, 150],
@@ -56,6 +59,7 @@ export default function FavoritesScreen() {
           <ThemedText style={styles.emptyText}>
             Chưa có phim yêu thích
           </ThemedText>
+          <Button title="Nạp dữ liệu" onPress={() => importData(likeVietSubs)} />
           <ThemedText style={styles.emptySubtext}>
             Nhấn vào biểu tượng trái tim để thêm phim vào danh sách yêu thích
           </ThemedText>

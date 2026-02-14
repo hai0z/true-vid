@@ -23,6 +23,10 @@ export default function TabLayout() {
         <Label>Yêu thích</Label>
         <Icon sf="heart.fill" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="actors">
+        <Label>Diễn viên</Label>
+        <Icon sf="person.2.fill" />
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="search" role='search' >
         <Label>Tìm kiếm</Label>
         <Icon sf="magnifyingglass" />

@@ -124,9 +124,21 @@ export default function MovieDetailScreen() {
           {movie.actors && movie.actors.length > 0 && (
             <View style={styles.infoItem}>
               <ThemedText style={styles.infoLabel}>Diễn viên:</ThemedText>
-              <ThemedText style={styles.infoValue}>
-                {movie.actors.join(', ')}
-              </ThemedText>
+              <View style={styles.actorsContainer}>
+                {movie.actors.map((actor, index) => (
+                  <View key={index} style={styles.actorWrapper}>
+                    <Pressable
+                      style={styles.actorButton}
+                      onPress={() => router.push(`/(home)/actor/${encodeURIComponent(actor)}` as any)}
+                    >
+                      <ThemedText style={styles.actorText}>{actor}</ThemedText>
+                    </Pressable>
+                    {index < movie.actors.length - 1 && (
+                      <ThemedText style={styles.actorSeparator}>, </ThemedText>
+                    )}
+                  </View>
+                ))}
+              </View>
             </View>
           )}
 
@@ -254,5 +266,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     opacity: 0.8,
     flex: 1,
+  },
+  actorsContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+  },
+  actorWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  actorButton: {
+    paddingVertical: 2,
+  },
+  actorText: {
+    fontSize: 14,
+    color: '#FF6B6B',
+    fontWeight: '500',
+  },
+  actorSeparator: {
+    fontSize: 14,
+    opacity: 0.8,
   },
 });
