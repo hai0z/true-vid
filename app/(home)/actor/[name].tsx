@@ -9,12 +9,12 @@ import { BlurView } from 'expo-blur';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef } from 'react';
 import {
-    Animated,
-    Platform,
-    Pressable,
-    StyleSheet,
-    Text,
-    View
+  Animated,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View
 } from 'react-native';
 
 interface Actor {
@@ -27,7 +27,7 @@ interface Actor {
 export default function ActorDetailScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = true; // Force dark mode
   const scrollY = useRef(new Animated.Value(0)).current;
 
   const actors = actorsData as Actor[];

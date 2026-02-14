@@ -2,7 +2,7 @@ import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
 
 export default function TabLayout() {
   return (
-    <NativeTabs iconColor={'red'} blurEffect='dark'
+    <NativeTabs iconColor={'red'} 
       minimizeBehavior='onScrollDown'>
       <NativeTabs.Trigger name="index">
         <Label>Phim</Label>

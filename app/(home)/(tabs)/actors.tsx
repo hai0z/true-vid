@@ -27,7 +27,7 @@ interface Actor {
 
 export default function ActorsScreen() {
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = true; // Force dark mode
   const scrollY = useRef(new Animated.Value(0)).current;
   const [searchQuery, setSearchQuery] = useState('');
 

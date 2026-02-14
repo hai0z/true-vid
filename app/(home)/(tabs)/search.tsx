@@ -18,7 +18,6 @@ import {
 import { MovieCard } from '@/components/movie-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import moviesData from '@/constants/movies.json';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Movie } from '@/types/Movie';
 
 // ─── Constants ────────────────────────────────────────────
@@ -80,8 +79,7 @@ function useDebounce<T>(value: T, delay: number): T {
 // ─── Component ────────────────────────────────────────────
 
 export default function SearchScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const isDark = true; // Force dark mode
   const movies = moviesData as Movie[];
 
   // ── State ──

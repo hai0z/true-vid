@@ -38,12 +38,10 @@ export default function PlayerScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Dùng ref để đảm bảo không chạy lệnh nếu component đã unmount giữa chừng
-      let isMounted = true; 
+      let isMounted = true;
 
       const lockLandscape = async () => {
         try {
-          // ⏳ Đợi 1 chút cho Animation chuyển trang chạy xong hẳn
           await new Promise(resolve => setTimeout(resolve, 200));
           
           if (isMounted) {
@@ -58,8 +56,7 @@ export default function PlayerScreen() {
 
       return () => {
         isMounted = false;
-        // Khi rời đi thì xoay dọc lại
-        ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        // Cleanup sẽ được xử lý bởi handleGoBack
       };
     }, [])
   );
@@ -220,20 +217,21 @@ export default function PlayerScreen() {
 
   const handleGoBack = useCallback(async () => {
     try {
-      // Dừng video để tránh tiếng chạy nền khi chuyển cảnh
+      // Dừng video trước
       if (videoRef.current) {
         await videoRef.current.pauseAsync();
       }
       
-      // Ép về màn hình dọc TRƯỚC KHI back
+      // Force về portrait trước khi back
       await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
       
-      // Đợi 1 chút để UI kịp phản hồi (tuỳ chọn, nhưng giúp mượt hơn trên Android)
-      // await new Promise(resolve => setTimeout(resolve, 100)); 
+      // Đợi một chút để orientation kịp apply
+      await new Promise(resolve => setTimeout(resolve, 150));
       
       router.back();
     } catch (error) {
-      console.log('Error changing orientation:', error);
+      console.log('Error going back:', error);
+      // Vẫn cố back dù có lỗi
       router.back();
     }
   }, [router]);
