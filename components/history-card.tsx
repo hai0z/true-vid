@@ -3,8 +3,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
-import { ThemedText } from './themed-text';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 
 interface HistoryCardProps {
   title: string;
@@ -86,9 +85,9 @@ export function HistoryCard({
           {/* Time Remaining */}
           {duration > 0 && (
             <View style={styles.timeBadge}>
-              <ThemedText style={styles.timeText}>
+              <Text style={styles.timeText}>
                 {formatTime(position)}
-              </ThemedText>
+              </Text>
             </View>
           )}
 
@@ -106,9 +105,9 @@ export function HistoryCard({
         </View>
 
         {/* Title */}
-        <ThemedText numberOfLines={2} style={styles.title}>
+        <Text numberOfLines={2} style={styles.title}>
           {title}
-        </ThemedText>
+        </Text>
       </Pressable>
     </Animated.View>
   );

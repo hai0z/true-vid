@@ -1,19 +1,8 @@
 import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
-import { DynamicColorIOS } from 'react-native';
 
 export default function TabLayout() {
   return (
-    <NativeTabs iconColor={'red'} blurEffect='prominent' labelStyle={{
-        // For the text color
-        color: DynamicColorIOS({
-          dark: 'white',
-          light: 'black',
-        }),
-      }}
-       tintColor={DynamicColorIOS({
-        dark: 'white',
-        light: 'black',
-      })}
+    <NativeTabs iconColor={'red'} blurEffect='dark'
       minimizeBehavior='onScrollDown'>
       <NativeTabs.Trigger name="index">
         <Label>Phim</Label>
@@ -31,10 +20,10 @@ export default function TabLayout() {
         <Label>Tìm kiếm</Label>
         <Icon sf="magnifyingglass" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="settings">
+      {/* <NativeTabs.Trigger name="settings">
         <Label>Cài đặt</Label>
         <Icon sf="gear" />
-      </NativeTabs.Trigger>
+      </NativeTabs.Trigger> */}
     </NativeTabs>
   );
 }

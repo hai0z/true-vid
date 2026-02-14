@@ -1,6 +1,4 @@
 // app/player/[slug].tsx
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { VideoControls } from '@/components/video-controls';
 import { VideoGestureHandler } from '@/components/video-gesture-handler';
 import { useMovieDetail } from '@/hooks/use-movies';
@@ -9,7 +7,7 @@ import { AVPlaybackStatus, ResizeMode, Video } from 'expo-av';
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 export default function PlayerScreen() {
@@ -265,17 +263,17 @@ export default function PlayerScreen() {
 
   if (!videoUrl) {
     return (
-      <ThemedView style={styles.loadingContainer}>
-        <ThemedText style={styles.errorText}>Không tìm thấy video</ThemedText>
-      </ThemedView>
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Không tìm thấy video</Text>
+      </View>
     );
   }
 
   if (isLoadingVideo) {
     return (
-      <ThemedView style={styles.loadingContainer} >
+      <View style={styles.loadingContainer} >
         <ActivityIndicator size="large" color="#fff" />
-        <ThemedText style={styles.loadingText}>Đang tải video...</ThemedText>
+        <Text style={styles.loadingText}>Đang tải video...</Text>
 
         <View style={styles.hiddenWebViewContainer}>
           <WebView
@@ -343,22 +341,22 @@ export default function PlayerScreen() {
             }}
           />
         </View>
-      </ThemedView>
+      </View>
     );
   }
 
   if (!m3u8Url || videoError) {
     return (
-      <ThemedView style={styles.loadingContainer}>
-        <ThemedText style={styles.errorText}>
+      <View style={styles.loadingContainer}>
+        <Text style={styles.errorText}>
           {videoError || 'Không tìm thấy URL video'}
-        </ThemedText>
-      </ThemedView>
+        </Text>
+      </View>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       <Stack.Screen 
         options={{
           headerShown: false,
@@ -412,7 +410,7 @@ export default function PlayerScreen() {
           onDoubleTapRight={handleDoubleTapRight}
         />
       </VideoGestureHandler>
-    </ThemedView>
+    </View>
   );
 }
 

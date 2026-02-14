@@ -1,13 +1,11 @@
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useMovieDetail } from '@/hooks/use-movies';
 import { useFavoritesStore } from '@/store/use-favorites-store';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function MovieDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -17,17 +15,17 @@ export default function MovieDetailScreen() {
 
   if (isLoading) {
     return (
-      <ThemedView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" />
-      </ThemedView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FF6B6B" />
+      </View>
     );
   }
 
   if (!data?.movie) {
     return (
-      <ThemedView style={styles.loadingContainer}>
-        <ThemedText>Không tìm thấy phim</ThemedText>
-      </ThemedView>
+      <View style={styles.loadingContainer}>
+        <Text style={{ color: '#fff' }}>Không tìm thấy phim</Text>
+      </View>
     );
   }
 
@@ -43,7 +41,7 @@ export default function MovieDetailScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       <Pressable onPress={() => router.back()} style={styles.backButton}>
         <IconSymbol name="chevron.left" size={24} color="#fff" />
       </Pressable>
@@ -64,21 +62,21 @@ export default function MovieDetailScreen() {
           </>
         }
       >
-        <ThemedText type="title" style={styles.title}>
+        <Text  style={styles.title}>
           {movie.name}
-        </ThemedText>
+        </Text>
 
         <View style={styles.metaContainer}>
           {movie.quality && (
             <View style={styles.badge}>
-              <ThemedText style={styles.badgeText}>{movie.quality}</ThemedText>
+              <Text style={styles.badgeText}>{movie.quality}</Text>
             </View>
           )}
           {movie.time && (
-            <ThemedText style={styles.metaText}>{movie.time}</ThemedText>
+            <Text style={styles.metaText}>{movie.time}</Text>
           )}
           {movie.status && (
-            <ThemedText style={styles.metaText}>{movie.status}</ThemedText>
+            <Text style={styles.metaText}>{movie.status}</Text>
           )}
         </View>
 
@@ -88,7 +86,7 @@ export default function MovieDetailScreen() {
             onPress={() => router.push(`/(home)/player/${movie.slug}` as any)}
           >
             <IconSymbol name="play.fill" size={20} color="#000" />
-            <ThemedText style={styles.playButtonText}>Phát</ThemedText>
+            <Text style={styles.playButtonText}>Phát</Text>
           </Pressable>
 
           <Pressable 
@@ -105,25 +103,25 @@ export default function MovieDetailScreen() {
 
         {movie.content && (
           <View style={styles.section}>
-            <ThemedText style={styles.description}>
+            <Text style={styles.description}>
               {movie.content.replace(/<[^>]*>/g, '')}
-            </ThemedText>
+            </Text>
           </View>
         )}
 
         <View style={styles.infoGrid}>
           {movie.categories && movie.categories.length > 0 && (
             <View style={styles.infoItem}>
-              <ThemedText style={styles.infoLabel}>Thể loại:</ThemedText>
-              <ThemedText style={styles.infoValue}>
+              <Text style={styles.infoLabel}>Thể loại:</Text>
+              <Text style={styles.infoValue}>
                 {movie.categories.map(cat => cat.name).join(', ')}
-              </ThemedText>
+              </Text>
             </View>
           )}
 
           {movie.actors && movie.actors.length > 0 && (
             <View style={styles.infoItem}>
-              <ThemedText style={styles.infoLabel}>Diễn viên:</ThemedText>
+              <Text style={styles.infoLabel}>Diễn viên:</Text>
               <View style={styles.actorsContainer}>
                 {movie.actors.map((actor, index) => (
                   <View key={index} style={styles.actorWrapper}>
@@ -131,10 +129,10 @@ export default function MovieDetailScreen() {
                       style={styles.actorButton}
                       onPress={() => router.push(`/(home)/actor/${encodeURIComponent(actor)}` as any)}
                     >
-                      <ThemedText style={styles.actorText}>{actor}</ThemedText>
+                      <Text style={styles.actorText}>{actor}</Text>
                     </Pressable>
                     {index < movie.actors.length - 1 && (
-                      <ThemedText style={styles.actorSeparator}>, </ThemedText>
+                      <Text style={styles.actorSeparator}>, </Text>
                     )}
                   </View>
                 ))}
@@ -144,13 +142,13 @@ export default function MovieDetailScreen() {
 
           {movie.country && (
             <View style={styles.infoItem}>
-              <ThemedText style={styles.infoLabel}>Quốc gia:</ThemedText>
-              <ThemedText style={styles.infoValue}>{movie.country.name}</ThemedText>
+              <Text style={styles.infoLabel}>Quốc gia:</Text>
+              <Text style={styles.infoValue}>{movie.country.name}</Text>
             </View>
           )}
         </View>
       </ParallaxScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -190,6 +188,7 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 12,
+    color: '#fff',
   },
   metaContainer: {
     flexDirection: 'row',
@@ -210,6 +209,7 @@ const styles = StyleSheet.create({
   },
   metaText: {
     fontSize: 14,
+    color: '#fff',
     opacity: 0.7,
   },
   actionButtons: {
@@ -246,6 +246,7 @@ const styles = StyleSheet.create({
   description: {
     fontSize: 14,
     lineHeight: 22,
+    color: '#fff',
     opacity: 0.8,
   },
   infoGrid: {
@@ -259,11 +260,13 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: 14,
     fontWeight: '600',
+    color: '#fff',
     opacity: 0.6,
     minWidth: 80,
   },
   infoValue: {
     fontSize: 14,
+    color: '#fff',
     opacity: 0.8,
     flex: 1,
   },
@@ -287,6 +290,7 @@ const styles = StyleSheet.create({
   },
   actorSeparator: {
     fontSize: 14,
+    color: '#fff',
     opacity: 0.8,
   },
 });

@@ -1,5 +1,4 @@
 import { MovieCard } from '@/components/movie-card';
-import { ThemedView } from '@/components/themed-view';
 import { useMoviesByCategory } from '@/hooks/use-movies';
 import { Movie } from '@/types/Movie';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -53,7 +52,7 @@ export default function CategoryScreen() {
   );
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       <Stack.Screen
         options={{
           title: categoryName,
@@ -64,9 +63,9 @@ export default function CategoryScreen() {
       />
 
       {isLoading && page === 1 ? (
-        <ThemedView style={styles.loadingContainer}>
+        <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#fff" />
-        </ThemedView>
+        </View>
       ) : (
         <FlatList
           data={allMovies}
@@ -85,14 +84,14 @@ export default function CategoryScreen() {
           // Loader ở cuối khi cuộn
           ListFooterComponent={
             isFetching && page > 1 ? (
-              <ThemedView style={styles.footerLoader}>
+              <View style={styles.footerLoader}>
                 <ActivityIndicator color="#fff" />
-              </ThemedView>
+              </View>
             ) : <View style={{ height: 20 }} /> // Spacer dưới cùng
           }
         />
       )}
-    </ThemedView>
+    </View>
   );
 }
 

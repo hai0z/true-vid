@@ -1,5 +1,3 @@
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import actorsData from '@/constants/actors.json';
 import moviesData from '@/constants/movies.json';
@@ -15,9 +13,9 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  Text,
   TextInput,
-  TouchableOpacity,
-  View
+  TouchableOpacity, View
 } from 'react-native';
 
 interface Actor {
@@ -38,10 +36,10 @@ export default function ActorsScreen() {
 
   const C = useMemo(
     () => ({
-      bg: isDark ? '#151718' : '#ffffff',
-      headerBg: isDark ? '#151718' : '#ffffff',
-      card: isDark ? 'rgba(255,255,255,0.08)' : '#f4f4f8',
-      border: isDark ? 'rgba(255,255,255,0.1)' : '#e2e2e8',
+      bg: isDark ? '#0A0A0A' : '#ffffff',
+      headerBg: isDark ? '#0A0A0A' : '#ffffff',
+      card: isDark ? 'rgba(255,255,255,0.05)' : '#f4f4f8',
+      border: isDark ? 'rgba(255,255,255,0.08)' : '#e2e2e8',
       accent: isDark ? '#FF6B6B' : '#EE5A24',
       accentSoft: isDark ? 'rgba(255,107,107,0.12)' : 'rgba(238,90,36,0.12)',
       muted: isDark ? 'rgba(255,255,255,0.5)' : '#9e9eaf',
@@ -93,21 +91,21 @@ export default function ActorsScreen() {
         />
       </View>
       <View style={styles.actorInfo}>
-        <ThemedText style={[styles.actorName, { color: C.text }]} numberOfLines={2}>
+        <Text style={[styles.actorName, { color: C.text }]} numberOfLines={2}>
           {item.name}
-        </ThemedText>
+        </Text>
         <View style={[styles.movieCountBadge, { backgroundColor: C.accentSoft }]}>
           <IconSymbol name="film.fill" size={10} color={C.accent} />
-          <ThemedText style={[styles.movieCountText, { color: C.accent }]}>
+          <Text style={[styles.movieCountText, { color: C.accent }]}>
             {item.movieCount}
-          </ThemedText>
+          </Text>
         </View>
       </View>
     </Pressable>
   );
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: C.bg }]}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
       {/* Animated Header */}
       <Animated.View style={styles.headerWrapper}>
         <BlurView intensity={90} tint="dark" style={styles.header}>
@@ -123,14 +121,14 @@ export default function ActorsScreen() {
                 >
                   <IconSymbol name="person.2.fill" size={16} color="#fff" />
                 </LinearGradient>
-                <ThemedText type="title" style={styles.headerTitle}>
+                <Text  style={styles.headerTitle}>
                   Diễn viên
-                </ThemedText>
+                </Text>
               </View>
             </View>
-            <ThemedText style={styles.count}>
+            <Text style={styles.count}>
               {filteredActors.length} người
-            </ThemedText>
+            </Text>
           </View>
 
           {/* Search Bar */}
@@ -162,12 +160,12 @@ export default function ActorsScreen() {
           <View style={[styles.emptyCircle, { backgroundColor: C.accentSoft }]}>
             <IconSymbol name="person.fill.questionmark" size={36} color={C.accent} />
           </View>
-          <ThemedText style={[styles.emptyText, { color: C.text }]}>
+          <Text style={[styles.emptyText, { color: C.text }]}>
             Không tìm thấy diễn viên
-          </ThemedText>
-          <ThemedText style={[styles.emptySub, { color: C.muted }]}>
+          </Text>
+          <Text style={[styles.emptySub, { color: C.muted }]}>
             Thử từ khóa khác
-          </ThemedText>
+          </Text>
         </View>
       ) : (
         <Animated.FlatList
@@ -185,13 +183,14 @@ export default function ActorsScreen() {
           renderItem={renderActorCard}
         />
       )}
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0A0A0A',
   },
   // ─── Header ───────────────────────────
   headerWrapper: {
@@ -206,7 +205,7 @@ const styles = StyleSheet.create({
   },
   headerBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
+    backgroundColor: '#0A0A0A',
   },
   headerContent: {
     flexDirection: 'row',
@@ -241,6 +240,7 @@ const styles = StyleSheet.create({
   count: {
     fontSize: 14,
     opacity: 0.6,
+    color:'#fff'
   },
   // ─── Search ───────────────────────────
   searchContainer: {
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
   actorImageContainer: {
     width: '100%',
     aspectRatio: 16 / 9,
-    backgroundColor: '#1a1a1a',
+    backgroundColor: 'rgba(255,255,255,0.03)',
   },
   actorImage: {
     width: '100%',

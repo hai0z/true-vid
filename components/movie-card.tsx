@@ -2,8 +2,7 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRef } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
-import { ThemedText } from './themed-text';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { IconSymbol } from './ui/icon-symbol';
 
 interface MovieCardProps {
@@ -78,9 +77,9 @@ export function MovieCard({
           />
         </View>
 
-        <ThemedText style={styles.title} numberOfLines={2}>
+        <Text style={styles.title} numberOfLines={2}>
           {title}
-        </ThemedText>
+        </Text>
       </Pressable>
     </Animated.View>
   );

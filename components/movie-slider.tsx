@@ -2,8 +2,7 @@ import { Movie } from '@/types/Movie';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
-import { Dimensions, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { ThemedText } from './themed-text';
+import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { IconSymbol } from './ui/icon-symbol';
 
 const { width } = Dimensions.get('window');
@@ -88,44 +87,44 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
                   <View style={styles.badges}>
                     {movie.quality && (
                       <View style={styles.qualityBadge}>
-                        <ThemedText style={styles.qualityText}>{movie.quality}</ThemedText>
+                        <Text style={styles.qualityText}>{movie.quality}</Text>
                       </View>
                     )}
                     {movie.status && (
                       <View style={styles.statusBadge}>
-                        <ThemedText style={styles.statusText}>{movie.status}</ThemedText>
+                        <Text style={styles.statusText}>{movie.status}</Text>
                       </View>
                     )}
                   </View>
 
                   {/* Title */}
-                  <ThemedText style={styles.title} numberOfLines={2}>
+                  <Text style={styles.title} numberOfLines={2}>
                     {movie.name}
-                  </ThemedText>
+                  </Text>
 
                   {/* Meta Info */}
                   <View style={styles.metaContainer}>
                     {movie.time && (
                       <View style={styles.metaItem}>
                         <IconSymbol name="clock" size={14} color="rgba(255,255,255,0.8)" />
-                        <ThemedText style={styles.metaText}>{movie.time}</ThemedText>
+                        <Text style={styles.metaText}>{movie.time}</Text>
                       </View>
                     )}
                     {movie.categories && movie.categories.length > 0 && (
                       <View style={styles.metaItem}>
                         <IconSymbol name="tag" size={14} color="rgba(255,255,255,0.8)" />
-                        <ThemedText style={styles.metaText}>
+                        <Text style={styles.metaText}>
                           {movie.categories.slice(0, 2).map(c => c.name).join(', ')}
-                        </ThemedText>
+                        </Text>
                       </View>
                     )}
                   </View>
 
                   {/* Description */}
                   {movie.content && (
-                    <ThemedText style={styles.description} numberOfLines={3}>
+                    <Text style={styles.description} numberOfLines={3}>
                       {movie.content.replace(/<[^>]*>/g, '')}
-                    </ThemedText>
+                    </Text>
                   )}
 
                   {/* Action Buttons */}
@@ -137,7 +136,7 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
                       }}
                     >
                       <IconSymbol name="play.fill" size={18} color="#000" />
-                      <ThemedText style={styles.playButtonText}>Phát ngay</ThemedText>
+                      <Text style={styles.playButtonText}>Phát ngay</Text>
                     </Pressable>
                     
                     <Pressable 
@@ -147,7 +146,7 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
                       }}
                     >
                       <IconSymbol name="info.circle" size={18} color="#fff" />
-                      <ThemedText style={styles.infoButtonText}>Chi tiết</ThemedText>
+                      <Text style={styles.infoButtonText}>Chi tiết</Text>
                     </Pressable>
                   </View>
                 </View>

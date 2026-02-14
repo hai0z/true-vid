@@ -1,6 +1,4 @@
 import { MovieCard } from '@/components/movie-card';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { likeVietSubs } from '@/constants/Data';
 import { useFavoritesStore } from '@/store/use-favorites-store';
@@ -9,7 +7,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useRef } from 'react';
-import { Animated, Button, StyleSheet, View } from 'react-native';
+import { Animated, Button, StyleSheet, Text, View } from 'react-native';
 
 // Gọi hàm này khi cần
 export default function FavoritesScreen() {
@@ -25,7 +23,7 @@ const importData = useFavoritesStore((state) => state.importLegacyData);
   });
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       {/* Animated Blur Header */}
       <Animated.View style={styles.headerWrapper}>
         <BlurView intensity={90} tint="dark" style={styles.header}>
@@ -41,29 +39,29 @@ const importData = useFavoritesStore((state) => state.importLegacyData);
                 >
                   <Ionicons name="heart" size={16} color="#fff" />
                 </LinearGradient>
-                <ThemedText type="title" style={styles.headerTitle}>
+                <Text  style={styles.headerTitle}>
                   Yêu thích
-                </ThemedText>
+                </Text>
               </View>
             </View>
             {favorites.length > 0 && (
-              <ThemedText style={styles.count}>{favorites.length} phim</ThemedText>
+              <Text style={styles.count}>{favorites.length} phim</Text>
             )}
           </View>
         </BlurView>
       </Animated.View>
 
       {favorites.length === 0 ? (
-        <ThemedView style={styles.emptyState}>
+        <View style={styles.emptyState}>
           <IconSymbol name="heart" size={60} color="#666" />
-          <ThemedText style={styles.emptyText}>
+          <Text style={styles.emptyText}>
             Chưa có phim yêu thích
-          </ThemedText>
+          </Text>
           <Button title="Nạp dữ liệu" onPress={() => importData(likeVietSubs)} />
-          <ThemedText style={styles.emptySubtext}>
+          <Text style={styles.emptySubtext}>
             Nhấn vào biểu tượng trái tim để thêm phim vào danh sách yêu thích
-          </ThemedText>
-        </ThemedView>
+          </Text>
+        </View>
       ) : (
         <Animated.FlatList
           data={favorites}
@@ -90,13 +88,14 @@ const importData = useFavoritesStore((state) => state.importLegacyData);
           )}
         />
       )}
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0A0A0A',
   },
   // ─── Header ───────────────────────────
   headerWrapper: {
@@ -111,7 +110,7 @@ const styles = StyleSheet.create({
   },
   headerBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
+    backgroundColor: '#0A0A0A',
   },
   headerContent: {
     flexDirection: 'row',
@@ -146,6 +145,7 @@ const styles = StyleSheet.create({
   count: {
     fontSize: 14,
     opacity: 0.6,
+    color:'#fff'
   },
   // ─── List Content ─────────────────────
   listContent: {

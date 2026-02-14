@@ -1,6 +1,4 @@
 import { MovieCard } from '@/components/movie-card';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import actorsData from '@/constants/actors.json';
 import moviesData from '@/constants/movies.json';
@@ -15,7 +13,8 @@ import {
     Platform,
     Pressable,
     StyleSheet,
-    View,
+    Text,
+    View
 } from 'react-native';
 
 interface Actor {
@@ -36,8 +35,8 @@ export default function ActorDetailScreen() {
 
   const C = useMemo(
     () => ({
-      bg: isDark ? '#151718' : '#ffffff',
-      card: isDark ? 'rgba(255,255,255,0.08)' : '#f4f4f8',
+      bg: isDark ? '#0A0A0A' : '#ffffff',
+      card: isDark ? 'rgba(255,255,255,0.05)' : '#f4f4f8',
       accent: isDark ? '#FF6B6B' : '#EE5A24',
       accentSoft: isDark ? 'rgba(255,107,107,0.12)' : 'rgba(238,90,36,0.12)',
       muted: isDark ? 'rgba(255,255,255,0.5)' : '#9e9eaf',
@@ -75,28 +74,28 @@ export default function ActorDetailScreen() {
 
   if (!actor) {
     return (
-      <ThemedView style={[styles.container, { backgroundColor: C.bg }]}>
+      <View style={[styles.container, { backgroundColor: C.bg }]}>
         <Stack.Screen options={{ headerShown: false }} />
         <View style={styles.errorContainer}>
           <IconSymbol name="person.fill.xmark" size={60} color={C.muted} />
-          <ThemedText style={[styles.errorText, { color: C.text }]}>
+          <Text style={[styles.errorText, { color: C.text }]}>
             Không tìm thấy diễn viên
-          </ThemedText>
+          </Text>
           <Pressable
             style={[styles.backButton, { backgroundColor: C.accentSoft }]}
             onPress={() => router.back()}
           >
-            <ThemedText style={[styles.backButtonText, { color: C.accent }]}>
+            <Text style={[styles.backButtonText, { color: C.accent }]}>
               Quay lại
-            </ThemedText>
+            </Text>
           </Pressable>
         </View>
-      </ThemedView>
+      </View>
     );
   }
 
   return (
-    <ThemedView style={[styles.container, { backgroundColor: C.bg }]}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
       <Stack.Screen options={{ headerShown: false }} />
 
       {/* Fixed Header */}
@@ -112,9 +111,9 @@ export default function ActorDetailScreen() {
               <Ionicons name="chevron-back" size={28} color="#fff" />
             </Pressable>
             <Animated.View style={{ opacity: headerOpacity, flex: 1 }}>
-              <ThemedText style={styles.headerTitle} numberOfLines={1}>
+              <Text style={styles.headerTitle} numberOfLines={1}>
                 {actor.name}
-              </ThemedText>
+              </Text>
             </Animated.View>
           </View>
         </BlurView>
@@ -135,14 +134,14 @@ export default function ActorDetailScreen() {
         ListHeaderComponent={
           <View style={styles.actorInfoSection}>
             <View style={styles.actorHeader}>
-              <ThemedText style={[styles.actorName, { color: C.text }]}>
+              <Text style={[styles.actorName, { color: C.text }]}>
                 {actor.name}
-              </ThemedText>
+              </Text>
               <View style={[styles.movieCountBadge, { backgroundColor: C.accentSoft }]}>
                 <IconSymbol name="film.fill" size={14} color={C.accent} />
-                <ThemedText style={[styles.movieCountText, { color: C.accent }]}>
+                <Text style={[styles.movieCountText, { color: C.accent }]}>
                   {actorMovies.length} phim
-                </ThemedText>
+                </Text>
               </View>
             </View>
           </View>
@@ -161,19 +160,20 @@ export default function ActorDetailScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <IconSymbol name="film.stack" size={60} color={C.muted} />
-            <ThemedText style={[styles.emptyText, { color: C.text }]}>
+            <Text style={[styles.emptyText, { color: C.text }]}>
               Chưa có phim nào
-            </ThemedText>
+            </Text>
           </View>
         }
       />
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0A0A0A',
   },
   // ─── Header ───────────────────────────
   headerWrapper: {
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   },
   headerBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
+    backgroundColor: '#0A0A0A',
   },
   headerContent: {
     flexDirection: 'row',
@@ -202,7 +202,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -1,12 +1,10 @@
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
 export default function SettingsScreen() {
   const [notifications, setNotifications] = useState(true);
@@ -64,7 +62,7 @@ export default function SettingsScreen() {
   ];
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       {/* Animated Blur Header */}
       <Animated.View style={styles.headerWrapper}>
         <BlurView intensity={90} tint="dark" style={styles.header}>
@@ -80,9 +78,9 @@ export default function SettingsScreen() {
                 >
                   <Ionicons name="settings" size={16} color="#fff" />
                 </LinearGradient>
-                <ThemedText type="title" style={styles.headerTitle}>
+                <Text  style={styles.headerTitle}>
                   Cài đặt
-                </ThemedText>
+                </Text>
               </View>
             </View>
           </View>
@@ -100,9 +98,9 @@ export default function SettingsScreen() {
         contentContainerStyle={styles.scrollContent}
       >
         {settingsSections.map((section, sectionIndex) => (
-          <ThemedView key={sectionIndex} style={styles.section}>
-            <ThemedText style={styles.sectionTitle}>{section.title}</ThemedText>
-            <ThemedView style={styles.sectionContent}>
+          <View key={sectionIndex} style={styles.section}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            <View style={styles.sectionContent}>
               {section.items.map((item, itemIndex) => (
                 <Pressable
                   key={itemIndex}
@@ -112,7 +110,7 @@ export default function SettingsScreen() {
                 >
                   <View style={styles.settingLeft}>
                     <IconSymbol name={item.icon as any} size={24} color="#666" />
-                    <ThemedText style={styles.settingLabel}>{item.label}</ThemedText>
+                    <Text style={styles.settingLabel}>{item.label}</Text>
                   </View>
                   {item.toggle ? (
                     <Switch
@@ -124,20 +122,21 @@ export default function SettingsScreen() {
                   )}
                 </Pressable>
               ))}
-            </ThemedView>
-          </ThemedView>
+            </View>
+          </View>
         ))}
         
         <Pressable style={styles.logoutButton}>
-          <ThemedText style={styles.logoutText}>Đăng xuất</ThemedText>
+          <Text style={styles.logoutText}>Đăng xuất</Text>
         </Pressable>
       </Animated.ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0A0A0A',
   },
   // ─── Header ───────────────────────────
   headerWrapper: {
@@ -152,7 +151,7 @@ const styles = StyleSheet.create({
   },
   headerBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
+    backgroundColor: '#0A0A0A',
   },
   headerContent: {
     flexDirection: 'row',
@@ -211,7 +210,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#333',
+    borderBottomColor: 'rgba(255,255,255,0.05)',
   },
   settingLeft: {
     flexDirection: 'row',

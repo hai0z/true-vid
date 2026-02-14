@@ -1,8 +1,6 @@
 import { HistoryCard } from '@/components/history-card';
 import { MovieCard } from '@/components/movie-card';
 import { MovieSlider } from '@/components/movie-slider';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { useMovies, useMoviesByCategory } from '@/hooks/use-movies';
 import { useWatchHistoryStore } from '@/store/use-watch-history-store';
 import { Ionicons } from '@expo/vector-icons';
@@ -13,9 +11,11 @@ import { useRef } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   View
 } from 'react-native';
 
@@ -65,7 +65,7 @@ export default function MoviesScreen() {
   
 
   return (
-    <ThemedView style={styles.container}>
+    <View style={styles.container}>
       {/* Animated Header */}
       <Animated.View style={[styles.headerWrapper]}>
         <BlurView intensity={90} tint="dark" style={styles.header}>
@@ -81,9 +81,9 @@ export default function MoviesScreen() {
                 >
                   <Ionicons name="play" size={16} color="#fff" />
                 </LinearGradient>
-                <ThemedText type="title" style={styles.headerTitle}>
+                <Text  style={styles.headerTitle}>
                   PhimHay
-                </ThemedText>
+                </Text>
               </View>
             </View>
            
@@ -101,10 +101,13 @@ export default function MoviesScreen() {
         scrollEventThrottle={16}
       >
         {isLoadingAll ? (
-          <ThemedView style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FF6B6B" />
-            <ThemedText style={styles.loadingText}>Đang tải phim...</ThemedText>
-          </ThemedView>
+          <View style={styles.loadingContainer}>
+            <View style={styles.loadingContent}>
+              <ActivityIndicator size="large" color="#FF6B6B" />
+              <Text style={styles.loadingTitle}>Đang tải phim</Text>
+              <Text style={styles.loadingSubtitle}>Vui lòng đợi trong giây lát...</Text>
+            </View>
+          </View>
         ) : (
           <>
             {/* Hero Slider */}
@@ -119,7 +122,7 @@ export default function MoviesScreen() {
                 }
               />
               <LinearGradient
-                colors={['transparent', '#151718', '#151718']}
+                colors={['transparent', '#0A0A0A', '#0A0A0A']}
                 style={styles.sliderGradient}
               />
             </View>
@@ -133,9 +136,9 @@ export default function MoviesScreen() {
                       colors={['#FF6B6B', '#EE5A24']}
                       style={styles.sectionIndicator}
                     />
-                    <ThemedText type="subtitle" style={styles.sectionTitle}>
+                    <Text  style={styles.sectionTitle}>
                       Xem gần đây
-                    </ThemedText>
+                    </Text>
                   </View>
                   <Pressable
                     style={({ pressed }) => [
@@ -143,9 +146,9 @@ export default function MoviesScreen() {
                       pressed && styles.buttonPressed,
                     ]}
                   >
-                    <ThemedText style={styles.clearHistoryText}>
+                    <Text style={styles.clearHistoryText}>
                       Xem tất cả
-                    </ThemedText>
+                    </Text>
                     <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.5)" />
                   </Pressable>
                 </View>
@@ -188,9 +191,9 @@ export default function MoviesScreen() {
                           colors={['#FF6B6B', '#EE5A24']}
                           style={styles.sectionIndicator}
                         />
-                        <ThemedText type="subtitle" style={styles.sectionTitle}>
+                        <Text  style={styles.sectionTitle}>
                           {category.name}
-                        </ThemedText>
+                        </Text>
                       </View>
                       <Pressable
                         onPress={() =>
@@ -203,9 +206,9 @@ export default function MoviesScreen() {
                           pressed && styles.buttonPressed,
                         ]}
                       >
-                        <ThemedText style={styles.seeMoreText}>
+                        <Text style={styles.seeMoreText}>
                           Xem thêm
-                        </ThemedText>
+                        </Text>
                         <Ionicons
                           name="chevron-forward"
                           size={14}
@@ -252,13 +255,14 @@ export default function MoviesScreen() {
           </>
         )}
       </Animated.ScrollView>
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0A0A0A',
   },
 
   // ─── Header ───────────────────────────
@@ -274,7 +278,7 @@ const styles = StyleSheet.create({
   },
   headerBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
+    backgroundColor: '#0A0A0A',
   },
   headerContent: {
     flexDirection: 'row',
@@ -315,7 +319,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -330,18 +334,30 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
+    minHeight: Dimensions.get('screen').height
   },
-  loadingText: {
+  loadingContent: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: -0.3,
+    marginTop: 4,
+  },
+  loadingSubtitle: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255,255,255,0.4)',
+    fontWeight: '400',
   },
 
   // ─── Slider ───────────────────────────
   sliderContainer: {
     position: 'relative',
     marginBottom: 8,
-    paddingTop:96
+    paddingTop:48
   },
   sliderGradient: {
     position: 'absolute',
@@ -390,7 +406,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     gap: 4,
   },
   seeMoreText: {
@@ -410,7 +426,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     gap: 4,
   },
   clearHistoryText: {
@@ -435,7 +451,7 @@ const styles = StyleSheet.create({
     height: HISTORY_CARD_HEIGHT,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
   },
   historyThumbnail: {
     width: '100%',

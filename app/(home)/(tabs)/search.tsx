@@ -4,18 +4,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   Keyboard,
   Platform,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
 
 import { MovieCard } from '@/components/movie-card';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import moviesData from '@/constants/movies.json';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -24,7 +24,7 @@ import { Movie } from '@/types/Movie';
 // ─── Constants ────────────────────────────────────────────
 const SEARCH_HISTORY_KEY = 'movie_search_history';
 const MAX_HISTORY = 10;
-const DEBOUNCE_MS = 300;
+const DEBOUNCE_MS = 400;
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -89,6 +89,7 @@ export default function SearchScreen() {
   const [focused, setFocused] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   const debouncedQuery = useDebounce(query, DEBOUNCE_MS);
+  const isSearching = query.trim() !== debouncedQuery.trim();
 
   // ── Refs ──
   const inputRef = useRef<TextInput>(null);
@@ -98,15 +99,15 @@ export default function SearchScreen() {
   // ── Colors ──
   const C = useMemo(
     () => ({
-      bg: isDark ? '#151718' : '#ffffff',
-      headerBg: isDark ? '#151718' : '#ffffff',
-      card: isDark ? 'rgba(255,255,255,0.08)' : '#f4f4f8',
-      border: isDark ? 'rgba(255,255,255,0.1)' : '#e2e2e8',
+      bg: isDark ? '#0A0A0A' : '#ffffff',
+      headerBg: isDark ? '#0A0A0A' : '#ffffff',
+      card: isDark ? 'rgba(255,255,255,0.05)' : '#f4f4f8',
+      border: isDark ? 'rgba(255,255,255,0.08)' : '#e2e2e8',
       accent: isDark ? '#FF6B6B' : '#EE5A24',
       accentSoft: isDark ? 'rgba(255,107,107,0.12)' : 'rgba(238,90,36,0.12)',
       muted: isDark ? 'rgba(255,255,255,0.5)' : '#9e9eaf',
       text: isDark ? '#fff' : '#1a1a2e',
-      tagBg: isDark ? 'rgba(255,255,255,0.08)' : '#ededf4',
+      tagBg: isDark ? 'rgba(255,255,255,0.05)' : '#ededf4',
     }),
     [isDark],
   );
@@ -221,9 +222,9 @@ export default function SearchScreen() {
               >
                 <IconSymbol name="magnifyingglass" size={16} color="#fff" />
               </LinearGradient>
-              <ThemedText type="title" style={styles.headerTitle}>
+              <Text  style={styles.headerTitle}>
                 Tìm kiếm
-              </ThemedText>
+              </Text>
             </View>
           </View>
         </View>
@@ -273,9 +274,9 @@ export default function SearchScreen() {
 
             {focused && (
               <TouchableOpacity onPress={cancel} style={styles.cancelBtn}>
-                <ThemedText style={[styles.cancelTxt, { color: C.accent }]}>
+                <Text style={[styles.cancelTxt, { color: C.accent }]}>
                   Huỷ
-                </ThemedText>
+                </Text>
               </TouchableOpacity>
             )}
           </View>
@@ -290,13 +291,13 @@ export default function SearchScreen() {
       {history.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionRow}>
-            <ThemedText style={[styles.sectionTitle, { color: C.text }]}>
+            <Text style={[styles.sectionTitle, { color: C.text }]}>
               Gần đây
-            </ThemedText>
+            </Text>
             <TouchableOpacity onPress={clearAllHistory}>
-              <ThemedText style={[styles.clearAll, { color: C.accent }]}>
+              <Text style={[styles.clearAll, { color: C.accent }]}>
                 Xoá tất cả
-              </ThemedText>
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -307,11 +308,11 @@ export default function SearchScreen() {
               activeOpacity={0.6}
               onPress={() => setQuery(h)}>
               <IconSymbol name="clock" size={16} color={C.muted} />
-              <ThemedText
+              <Text
                 style={[styles.historyTxt, { color: C.text }]}
                 numberOfLines={1}>
                 {h}
-              </ThemedText>
+              </Text>
               <TouchableOpacity onPress={() => removeHistory(h)} hitSlop={12}>
                 <IconSymbol name="xmark" size={12} color={C.muted} />
               </TouchableOpacity>
@@ -322,9 +323,9 @@ export default function SearchScreen() {
 
       {/* ── Popular categories ── */}
       <View style={styles.section}>
-        <ThemedText style={[styles.sectionTitle, { color: C.text }]}>
+        <Text style={[styles.sectionTitle, { color: C.text }]}>
           Thể loại phổ biến
-        </ThemedText>
+        </Text>
         <View style={styles.tags}>
           {popularCategories.map((cat, i) => (
             <TouchableOpacity
@@ -332,9 +333,9 @@ export default function SearchScreen() {
               style={[styles.tag, { backgroundColor: C.accentSoft }]}
               activeOpacity={0.7}
               onPress={() => setQuery(cat)}>
-              <ThemedText style={[styles.tagTxt, { color: C.accent }]}>
+              <Text style={[styles.tagTxt, { color: C.accent }]}>
                 {cat}
-              </ThemedText>
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -347,12 +348,12 @@ export default function SearchScreen() {
             style={[styles.emptyCircle, { backgroundColor: C.accentSoft }]}>
             <IconSymbol name="magnifyingglass" size={36} color={C.accent} />
           </View>
-          <ThemedText style={[styles.emptyTitle, { color: C.text }]}>
+          <Text style={[styles.emptyTitle, { color: C.text }]}>
             Khám phá bộ phim yêu thích
-          </ThemedText>
-          <ThemedText style={[styles.emptySub, { color: C.muted }]}>
+          </Text>
+          <Text style={[styles.emptySub, { color: C.muted }]}>
             Tìm theo tên phim, diễn viên hoặc thể loại
-          </ThemedText>
+          </Text>
         </View>
       )}
     </View>
@@ -363,22 +364,38 @@ export default function SearchScreen() {
       <View style={[styles.emptyCircle, { backgroundColor: C.accentSoft }]}>
         <IconSymbol name="magnifyingglass" size={36} color={C.muted} />
       </View>
-      <ThemedText style={[styles.emptyTitle, { color: C.text }]}>
+      <Text style={[styles.emptyTitle, { color: C.text }]}>
         Không tìm thấy kết quả
-      </ThemedText>
-      <ThemedText style={[styles.emptySub, { color: C.muted }]}>
+      </Text>
+      <Text style={[styles.emptySub, { color: C.muted }]}>
         Thử từ khoá khác hoặc kiểm tra lại chính tả
-      </ThemedText>
+      </Text>
+    </View>
+  );
+
+  const renderSearching = () => (
+    <View style={styles.searchingContainer}>
+      <View style={styles.searchingContent}>
+        <ActivityIndicator size="large" color="#FF6B6B" />
+        <Text style={[styles.searchingText, { color: C.text }]}>
+          Đang tìm kiếm...
+        </Text>
+        <Text style={[styles.emptySub, { color: C.muted }]}>
+          "{query}"
+        </Text>
+      </View>
     </View>
   );
 
   // ── Main render ──
   return (
-    <ThemedView style={[styles.container, { backgroundColor: C.bg }]}>
+    <View style={[styles.container, { backgroundColor: C.bg }]}>
       {renderSearchBar()}
 
-      {debouncedQuery.trim() ? (
-        results.length > 0 ? (
+      {query.trim() ? (
+        isSearching ? (
+          renderSearching()
+        ) : debouncedQuery.trim() && results.length > 0 ? (
           <Animated.FlatList
             key="results-grid"  
             data={results}
@@ -396,9 +413,9 @@ export default function SearchScreen() {
             ListHeaderComponent={
               <View style={styles.resultBar}>
                 <View style={[styles.resultPill, { backgroundColor: C.accentSoft }]}>
-                  <ThemedText style={[styles.resultTxt, { color: C.accent }]}>
+                  <Text style={[styles.resultTxt, { color: C.accent }]}>
                     {results.length} kết quả
-                  </ThemedText>
+                  </Text>
                 </View>
               </View>
             }
@@ -414,8 +431,10 @@ export default function SearchScreen() {
               </View>
             )}
           />
-        ) : (
+        ) : debouncedQuery.trim() ? (
           renderNoResults()
+        ) : (
+          renderSearching()
         )
       ) : (
         <Animated.FlatList
@@ -431,7 +450,7 @@ export default function SearchScreen() {
           ListHeaderComponent={renderIdleContent}
         />
       )}
-    </ThemedView>
+    </View>
   );
 }
 
@@ -440,6 +459,7 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0A0A0A',
   },
 
   /* ── Header / Search bar ── */
@@ -455,7 +475,7 @@ const styles = StyleSheet.create({
   },
   headerBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
+    backgroundColor: '#0A0A0A',
   },
   headerContent: {
     flexDirection: 'row',
@@ -623,5 +643,22 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 40,
     lineHeight: 20,
+  },
+
+  /* ── Searching state ── */
+  searchingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 200,
+  },
+  searchingContent: {
+    alignItems: 'center',
+    gap: 12,
+  },
+  searchingText: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginTop: 4,
   },
 });
