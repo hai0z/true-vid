@@ -1,22 +1,23 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import actorsData from '@/constants/actors.json';
-import moviesData from '@/constants/movies.json';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Movie } from '@/types/Movie';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
-  Platform,
+  Dimensions,
+  Keyboard,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity, View
+  TouchableOpacity,
+  View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface Actor {
   id: string;
@@ -25,162 +26,212 @@ interface Actor {
   movieCount: number;
 }
 
+// ─── Constants ───
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const COLUMNS = 2; // Số cột
+const SPACING = 8;
+const HORIZONTAL_PADDING = 12;
+const ITEMS_PER_PAGE = 24; // Số lượng load mỗi lần
+
+const CARD_WIDTH = (SCREEN_WIDTH - (HORIZONTAL_PADDING * 2) - (SPACING * (COLUMNS - 1))) / COLUMNS;
+
+// ─── Component: Actor Card ───
+const ActorCard = memo(({ item, onPress }: { item: Actor; onPress: (name: string) => void }) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scaleAnim, { toValue: 0.96, useNativeDriver: true, speed: 50 }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 50 }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+      <Pressable
+        style={styles.actorCard}
+        onPress={() => onPress(item.name)}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+      >
+        <View style={styles.imageWrapper}>
+          {item.thumb_url ? (
+            <Image
+              source={{ uri: item.thumb_url }}
+              style={styles.actorImage}
+              contentFit="cover"
+              transition={200}
+              cachePolicy="memory-disk"
+            />
+          ) : (
+            <View style={styles.placeholder}>
+              <IconSymbol name="person.fill" size={24} color="#555" />
+            </View>
+          )}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.9)']}
+            locations={[0.4, 1]}
+            style={StyleSheet.absoluteFill}
+          />
+         
+          <View style={styles.nameOverlay}>
+            <Text style={styles.actorName} numberOfLines={2}>{item.name}</Text>
+          </View>
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
+}, (prev, next) => prev.item.id === next.item.id);
+
+// ─── Main Screen ───
 export default function ActorsScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = true; // Force dark mode
+  const insets = useSafeAreaInsets();
   const scrollY = useRef(new Animated.Value(0)).current;
+  const listRef = useRef<Animated.FlatList<any>>(null);
+  
+  // State
   const [searchQuery, setSearchQuery] = useState('');
+  const [visibleData, setVisibleData] = useState<Actor[]>([]); // Dữ liệu đang hiển thị
+  const [page, setPage] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const actors = actorsData as Actor[];
-  const movies = moviesData as Movie[];
 
-  const C = useMemo(
-    () => ({
-      bg: isDark ? '#0A0A0A' : '#ffffff',
-      headerBg: isDark ? '#0A0A0A' : '#ffffff',
-      card: isDark ? 'rgba(255,255,255,0.05)' : '#f4f4f8',
-      border: isDark ? 'rgba(255,255,255,0.08)' : '#e2e2e8',
-      accent: isDark ? '#FF6B6B' : '#EE5A24',
-      accentSoft: isDark ? 'rgba(255,107,107,0.12)' : 'rgba(238,90,36,0.12)',
-      muted: isDark ? 'rgba(255,255,255,0.5)' : '#9e9eaf',
-      text: isDark ? '#fff' : '#1a1a2e',
-    }),
-    [isDark],
-  );
+  // 1. Lọc dữ liệu gốc (Master List)
+  const allFilteredActors = useMemo(() => {
+    if (!searchQuery.trim()) return actors;
+    const query = searchQuery.toLowerCase();
+    return actors.filter((actor) => actor.name.toLowerCase().includes(query));
+  }, [searchQuery, actors]);
 
+  // 2. Reset khi search thay đổi
+  useEffect(() => {
+    setPage(1);
+    setVisibleData(allFilteredActors.slice(0, ITEMS_PER_PAGE));
+    // Scroll lên đầu khi tìm kiếm
+    if(listRef.current && visibleData.length > 0) {
+        listRef.current.scrollToOffset({ offset: 0, animated: false });
+    }
+  }, [allFilteredActors]);
+
+  // 3. Hàm Load More (Pagination Logic)
+  const loadMore = useCallback(() => {
+    if (isLoadingMore || visibleData.length >= allFilteredActors.length) return;
+
+    setIsLoadingMore(true);
+    
+    // Giả lập delay mạng một chút để UI mượt hơn (nếu dữ liệu local thì có thể bỏ setTimeout)
+    setTimeout(() => {
+      const nextPage = page + 1;
+      const newItems = allFilteredActors.slice(0, nextPage * ITEMS_PER_PAGE);
+      
+      setVisibleData(newItems);
+      setPage(nextPage);
+      setIsLoadingMore(false);
+    }, 200);
+  }, [page, isLoadingMore, visibleData.length, allFilteredActors]);
+
+  // Header Animation
   const headerBgOpacity = scrollY.interpolate({
-    inputRange: [0, 150],
-    outputRange: [0.3, 0.5],
+    inputRange: [0, 50],
+    outputRange: [0, 0.95],
     extrapolate: 'clamp',
   });
 
-  const filteredActors = useMemo(() => {
-    if (!searchQuery.trim()) return actors;
-    const query = searchQuery.toLowerCase();
-    return actors.filter((actor) =>
-      actor.name.toLowerCase().includes(query),
-    );
-  }, [searchQuery, actors]);
-
-  const handleActorPress = (actorName: string) => {
-    // Navigate to actor detail page
+  const handleActorPress = useCallback((actorName: string) => {
+    Keyboard.dismiss();
     router.push(`/(home)/actor/${encodeURIComponent(actorName)}` as any);
-  };
+  }, []);
 
-  const renderActorCard = ({ item }: { item: Actor }) => (
-    <Pressable
-      style={[styles.actorCard, { backgroundColor: C.card }]}
-      onPress={() => handleActorPress(item.name)}
-    >
-      <View style={styles.actorImageContainer}>
-        {item.thumb_url ? (
-          <Image
-            source={{ uri: item.thumb_url }}
-            style={styles.actorImage}
-            contentFit="cover"
-            transition={300}
-          />
-        ) : (
-          <View style={[styles.actorPlaceholder, { backgroundColor: C.accentSoft }]}>
-            <IconSymbol name="person.fill" size={32} color={C.accent} />
-          </View>
-        )}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.7)']}
-          style={styles.actorGradient}
-        />
+  const renderItem = useCallback(({ item }: { item: Actor }) => (
+    <ActorCard item={item} onPress={handleActorPress} />
+  ), [handleActorPress]);
+
+  const HEADER_HEIGHT = insets.top + 110;
+
+  // Footer Component (Loading Spinner)
+  const renderFooter = useCallback(() => {
+    if (!isLoadingMore) return <View style={{ height: 40 }} />;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator size="small" color="#FF6B6B" />
       </View>
-      <View style={styles.actorInfo}>
-        <Text style={[styles.actorName, { color: C.text }]} numberOfLines={2}>
-          {item.name}
-        </Text>
-        <View style={[styles.movieCountBadge, { backgroundColor: C.accentSoft }]}>
-          <IconSymbol name="film.fill" size={10} color={C.accent} />
-          <Text style={[styles.movieCountText, { color: C.accent }]}>
-            {item.movieCount}
-          </Text>
-        </View>
-      </View>
-    </Pressable>
-  );
+    );
+  }, [isLoadingMore]);
 
   return (
-    <View style={[styles.container, { backgroundColor: C.bg }]}>
-      {/* Animated Header */}
-      <Animated.View style={styles.headerWrapper}>
-        <BlurView intensity={90} tint="dark" style={styles.header}>
-          <Animated.View style={[styles.headerBg, { opacity: headerBgOpacity }]} />
-          <View style={styles.headerContent}>
-            <View style={styles.headerLeft}>
-              <View style={styles.logoContainer}>
-                <LinearGradient
-                  colors={['#FF6B6B', '#EE5A24']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.logoBadge}
-                >
-                  <IconSymbol name="person.2.fill" size={16} color="#fff" />
-                </LinearGradient>
-                <Text  style={styles.headerTitle}>
-                  Diễn viên
-                </Text>
-              </View>
+    <View style={styles.container}>
+      {/* ─── Header ─── */}
+      <View style={[styles.headerWrapper, { paddingTop: insets.top }]}>
+        <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
+        <Animated.View style={[styles.headerBg, { opacity: headerBgOpacity }]} />
+        
+        <View style={styles.headerInner}>
+          <View style={styles.titleRow}>
+            <View style={styles.logoGroup}>
+              <LinearGradient colors={['#FF6B6B', '#EE5A24']} style={styles.iconBadge}>
+                <IconSymbol name="person.2.fill" size={14} color="#fff" />
+              </LinearGradient>
+              <Text style={styles.screenTitle}>Diễn viên</Text>
             </View>
-            <Text style={styles.count}>
-              {filteredActors.length} người
-            </Text>
-          </View>
-
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <View style={[styles.searchBox, { backgroundColor: C.card, borderColor: C.border }]}>
-              <IconSymbol name="magnifyingglass" size={16} color={C.muted} />
-              <TextInput
-                style={[styles.searchInput, { color: C.text }]}
-                placeholder="Tìm diễn viên..."
-                placeholderTextColor={C.muted}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoCapitalize="none"
-                autoCorrect={false}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={12}>
-                  <IconSymbol name="xmark.circle.fill" size={16} color={C.muted} />
-                </TouchableOpacity>
-              )}
+            <View style={styles.totalBadge}>
+              <Text style={styles.totalText}>{allFilteredActors.length}</Text>
             </View>
           </View>
-        </BlurView>
-      </Animated.View>
 
-      {/* Actors List */}
-      {filteredActors.length === 0 ? (
-        <View style={styles.emptyState}>
-          <View style={[styles.emptyCircle, { backgroundColor: C.accentSoft }]}>
-            <IconSymbol name="person.fill.questionmark" size={36} color={C.accent} />
+          <View style={styles.searchBar}>
+            <IconSymbol name="magnifyingglass" size={16} color="rgba(255,255,255,0.4)" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Tìm diễn viên..."
+              placeholderTextColor="rgba(255,255,255,0.4)"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={10}>
+                <IconSymbol name="xmark.circle.fill" size={16} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
+            )}
           </View>
-          <Text style={[styles.emptyText, { color: C.text }]}>
-            Không tìm thấy diễn viên
-          </Text>
-          <Text style={[styles.emptySub, { color: C.muted }]}>
-            Thử từ khóa khác
-          </Text>
+        </View>
+      </View>
+
+      {/* ─── Content ─── */}
+      {visibleData.length === 0 ? (
+        <View style={[styles.emptyState, { paddingTop: HEADER_HEIGHT }]}>
+          <View style={styles.emptyIcon}>
+            <IconSymbol name="person.fill.questionmark" size={40} color="#FF6B6B" />
+          </View>
+          <Text style={styles.emptyText}>Không tìm thấy kết quả</Text>
         </View>
       ) : (
         <Animated.FlatList
-          data={filteredActors}
+          ref={listRef}
+          data={visibleData}
           keyExtractor={(item) => item.id}
-          numColumns={3}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.listContent}
+          numColumns={COLUMNS}
+          contentContainerStyle={{
+            paddingTop: HEADER_HEIGHT + 10,
+            paddingBottom: 80, // Để chừa chỗ cho footer
+            paddingHorizontal: HORIZONTAL_PADDING,
+          }}
+          columnWrapperStyle={{ gap: SPACING }}
+          ItemSeparatorComponent={() => <View style={{ height: SPACING }} />}
           showsVerticalScrollIndicator={false}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true },
           )}
           scrollEventThrottle={16}
-          renderItem={renderActorCard}
+          renderItem={renderItem}
+          // Pagination Props
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.5} // Load khi scroll còn 50% màn hình
+          ListFooterComponent={renderFooter}
+          keyboardDismissMode="on-drag"
         />
       )}
     </View>
@@ -192,154 +243,52 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
-  // ─── Header ───────────────────────────
+  // Header
   headerWrapper: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: 0, left: 0, right: 0,
     zIndex: 100,
-  },
-  header: {
     overflow: 'hidden',
+    paddingBottom: 10,
   },
   headerBg: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: 'rgba(10,10,10,0.8)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  headerContent: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: Platform.OS === 'ios' ? 56 : 48,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
+  headerInner: { paddingHorizontal: 16, gap: 12 },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', height: 44 },
+  logoGroup: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  iconBadge: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
+  screenTitle: { fontSize: 22, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  totalBadge: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
+  totalText: { fontSize: 12, fontWeight: '600', color: '#aaa' },
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 10, paddingHorizontal: 10, height: 40, gap: 8,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  logoBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#fff',
-    letterSpacing: -0.5,
-  },
-  count: {
-    fontSize: 14,
-    opacity: 0.6,
-    color:'#fff'
-  },
-  // ─── Search ───────────────────────────
-  searchContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    height: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    paddingVertical: 0,
-  },
-  // ─── List Content ─────────────────────
-  listContent: {
-    paddingTop: Platform.OS === 'ios' ? 170 : 162,
-    paddingHorizontal: 6,
-    paddingBottom: 80,
-  },
-  row: {
-    gap: 6,
-    marginBottom: 6,
-  },
-  // ─── Actor Card ───────────────────────
+  searchInput: { flex: 1, color: '#fff', fontSize: 14, paddingVertical: 0, height: '100%' },
+
+  // List & Card
   actorCard: {
-    flex: 1,
-    borderRadius: 10,
-    overflow: 'hidden',
-    marginHorizontal: 3,
+    width: CARD_WIDTH,
+    borderRadius: 12, overflow: 'hidden',
+    backgroundColor: '#1A1A1A',
   },
-  actorImageContainer: {
-    width: '100%',
-    aspectRatio: 16 / 9,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  actorImage: {
-    width: '100%',
-    height: '100%',
-  },
-  actorPlaceholder: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actorGradient: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  actorInfo: {
-    padding: 6,
-    gap: 4,
-  },
-  actorName: {
-    fontSize: 11,
-    fontWeight: '600',
-    lineHeight: 14,
-  },
-  movieCountBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 5,
-    gap: 3,
-  },
-  movieCountText: {
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  // ─── Empty State ──────────────────────
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 100,
-  },
-  emptyCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-  },
-  emptyText: {
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 6,
-  },
-  emptySub: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
+  imageWrapper: { width: '100%', aspectRatio: 16/9 },
+  actorImage: { width: '100%', height: '100%' },
+  placeholder: { width: '100%', height: '100%', justifyContent: 'center', alignItems: 'center', backgroundColor: '#222' },
+  nameOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 8, paddingBottom: 10 },
+  actorName: { color: '#fff', fontSize: 13, fontWeight: '700', textAlign: 'center', textShadowColor: 'rgba(0,0,0,0.8)', textShadowRadius: 3 },
+  countBadge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(255, 107, 107, 0.9)', minWidth: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
+  countText: { fontSize: 10, fontWeight: 'bold', color: '#fff' },
+
+  // Footer & Empty
+  footerLoader: { paddingVertical: 20, alignItems: 'center', justifyContent: 'center' },
+  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 100 },
+  emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,107,107,0.1)', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  emptyText: { color: '#fff', fontSize: 16, fontWeight: '600' },
 });

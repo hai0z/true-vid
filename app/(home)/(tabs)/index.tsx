@@ -86,7 +86,15 @@ export default function MoviesScreen() {
                 </Text>
               </View>
             </View>
-           
+            
+            <View style={styles.headerRight}>
+              <Pressable 
+                onPress={() => router.push('/(home)/history' as any)}
+                style={styles.headerIconButton}
+              >
+                <Ionicons name="time-outline" size={22} color="#fff" />
+              </Pressable>
+            </View>
           </View>
         </BlurView>
       </Animated.View>
@@ -163,9 +171,7 @@ export default function MoviesScreen() {
                   {history.slice(0, 10).map((item, index) => (
                     <View
                       key={item.movie.id}
-                      style={[
-                        index === 0 && { marginLeft: 12 },
-                      ]}
+                     
                     >
                       <HistoryCard
                         title={item.movie.name}
@@ -436,7 +442,7 @@ const styles = StyleSheet.create({
   },
   historyScrollContent: {
     paddingRight: 16,
-    gap: 12,
+    gap: 4,
   },
   historyCard: {
     width: HISTORY_CARD_WIDTH,

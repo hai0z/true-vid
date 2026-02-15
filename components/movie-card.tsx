@@ -1,9 +1,16 @@
-import * as Haptics from 'expo-haptics';
+import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
-import { IconSymbol } from './ui/icon-symbol';
+import {
+  Animated,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  Text,
+  View,
+  ViewStyle,
+} from 'react-native';
 
 interface MovieCardProps {
   id: string;
@@ -11,10 +18,10 @@ interface MovieCardProps {
   poster?: string;
   onPress?: () => void;
   variant?: 'horizontal' | 'grid';
+  /** Chiều rộng tùy chỉnh cho variant horizontal (Mặc định: 220) */
+  width?: number;
+  style?: StyleProp<ViewStyle>;
 }
-
-const CARD_WIDTH = 160;
-const CARD_HEIGHT = 100;
 
 export function MovieCard({
   id,
@@ -22,13 +29,16 @@ export function MovieCard({
   poster,
   onPress,
   variant = 'horizontal',
+  width = 220, // Kích thước mặc định rộng hơn chút để đẹp tỉ lệ 16:9
+  style,
 }: MovieCardProps) {
   const isGrid = variant === 'grid';
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
+  // Animation logic
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
-      toValue: 0.95,
+      toValue: 0.96,
       useNativeDriver: true,
       speed: 50,
       bounciness: 4,
@@ -44,39 +54,45 @@ export function MovieCard({
     }).start();
   };
 
-  const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onPress?.();
-  };
-
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <Animated.View
+      style={[
+        { transform: [{ scale: scaleAnim }] },
+        // Nếu là grid thì flex, nếu horizontal thì dùng width cố định
+        isGrid ? styles.gridContainer : { width, marginLeft: 16 },
+        style,
+      ]}
+    >
       <Pressable
-        style={isGrid ? styles.gridCard : styles.card}
-        onPress={handlePress}
+        onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        style={styles.pressable}
       >
-        <View style={isGrid ? styles.gridPoster : styles.poster}>
+        {/* Image Container - Luôn giữ tỉ lệ 16:9 */}
+        <View style={styles.imageContainer}>
           {poster ? (
             <Image
               source={{ uri: poster }}
-              style={styles.posterImage}
+              style={styles.image}
               contentFit="cover"
               transition={300}
+              cachePolicy="memory-disk"
             />
           ) : (
-            <View style={styles.placeholderContainer}>
-              <IconSymbol name="film" size={36} color="#555" />
+            <View style={styles.placeholder}>
+              <IconSymbol name="film" size={32} color="rgba(255,255,255,0.2)" />
             </View>
           )}
 
+          {/* Gradient nhẹ để tạo chiều sâu */}
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.6)']}
-            style={styles.gradientOverlay}
+            colors={['transparent', 'rgba(0,0,0,0.4)']}
+            style={StyleSheet.absoluteFill}
           />
         </View>
 
+        {/* Title Section */}
         <Text style={styles.title} numberOfLines={2}>
           {title}
         </Text>
@@ -86,47 +102,38 @@ export function MovieCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    marginLeft: 16,
-    width: CARD_WIDTH,
-  },
-  poster: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  gridCard: {
+  gridContainer: {
     flex: 1,
-    marginHorizontal: 6,
-    marginBottom: 16,
+    // Margin xử lý ở parent (FlatList columnWrapperStyle) hoặc truyền vào style prop
   },
-  gridPoster: {
+  pressable: {
+    flex: 1,
+  },
+  imageContainer: {
     width: '100%',
-    aspectRatio: 16 / 10,
-    backgroundColor: '#1a1a1a',
+    // ✨ MAGIC: Tự động tính chiều cao theo tỉ lệ 16:9
+    aspectRatio: 16 / 9, 
     borderRadius: 12,
+    backgroundColor: '#1a1a1a', // Skeleton background
     overflow: 'hidden',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
-  posterImage: {
+  image: {
     width: '100%',
     height: '100%',
   },
-  placeholderContainer: {
-    ...StyleSheet.absoluteFillObject,
+  placeholder: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-  },
-  gradientOverlay: {
-    ...StyleSheet.absoluteFillObject,
   },
   title: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
     marginTop: 8,
-    lineHeight: 16,
+    lineHeight: 18,
   },
 });

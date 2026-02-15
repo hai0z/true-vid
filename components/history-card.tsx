@@ -1,9 +1,16 @@
-// components/history-card.tsx
 import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useRef } from 'react';
-import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  Text,
+  View,
+  ViewStyle,
+} from 'react-native';
 
 interface HistoryCardProps {
   title: string;
@@ -11,10 +18,12 @@ interface HistoryCardProps {
   position: number;
   duration: number;
   onPress?: () => void;
+  /** Chế độ hiển thị: 'horizontal' (list ngang) hoặc 'grid' (lưới) */
+  variant?: 'horizontal' | 'grid';
+  /** Chiều rộng tùy chỉnh cho chế độ horizontal (Mặc định: 220) */
+  width?: number;
+  style?: StyleProp<ViewStyle>;
 }
-
-const CARD_WIDTH = 160;
-const CARD_HEIGHT = 100;
 
 export function HistoryCard({
   title,
@@ -22,12 +31,17 @@ export function HistoryCard({
   position,
   duration,
   onPress,
+  variant = 'horizontal',
+  width = 220,
+  style,
 }: HistoryCardProps) {
+  const isGrid = variant === 'grid';
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
+  // Animation Press
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
-      toValue: 0.95,
+      toValue: 0.96,
       useNativeDriver: true,
       speed: 50,
       bounciness: 4,
@@ -48,41 +62,49 @@ export function HistoryCard({
     onPress?.();
   };
 
+  // Format: MM:SS hoặc HH:MM:SS
   const formatTime = useCallback((seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    if (!seconds) return '0:00';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m}:${s.toString().padStart(2, '0')}`;
   }, []);
 
-  const progressPercent =
-    duration > 0 ? Math.min((position / duration) * 100, 100) : 0;
-  const timeRemaining = duration > 0 ? duration - position : 0;
+  const progressPercent = duration > 0 ? Math.min((position / duration) * 100, 100) : 0;
 
   return (
-    <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+    <Animated.View
+      style={[
+        { transform: [{ scale: scaleAnim }] },
+        isGrid ? styles.gridContainer : { width, marginLeft: 16 },
+        style,
+      ]}
+    >
       <Pressable
-        style={styles.card}
+        style={styles.pressable}
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
-        {/* Thumbnail */}
+        {/* Thumbnail Container (16:9) */}
         <View style={styles.thumbnailContainer}>
           <Image
             source={{ uri: thumbnail }}
             style={styles.thumbnail}
             contentFit="cover"
             transition={300}
+            cachePolicy="memory-disk"
           />
 
           <LinearGradient
-            colors={['transparent', 'rgba(0,0,0,0.85)']}
+            colors={['transparent', 'rgba(0,0,0,0.7)']}
             style={styles.gradientOverlay}
           />
 
-          
-
-          {/* Time Remaining */}
+          {/* Time Badge (Current Position) */}
           {duration > 0 && (
             <View style={styles.timeBadge}>
               <Text style={styles.timeText}>
@@ -94,12 +116,14 @@ export function HistoryCard({
           {/* Progress Bar */}
           {duration > 0 && (
             <View style={styles.progressContainer}>
-              <LinearGradient
-                colors={['#FF6B6B', '#EE5A24']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.progressBar, { width: `${progressPercent}%` }]}
-              />
+              <View style={styles.progressBarBackground}>
+                <LinearGradient
+                  colors={['#FF6B6B', '#FF8E53']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[styles.progressBarFill, { width: `${progressPercent}%` }]}
+                />
+              </View>
             </View>
           )}
         </View>
@@ -114,16 +138,22 @@ export function HistoryCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    width: CARD_WIDTH,
-    overflow: 'hidden',
+  gridContainer: {
+    flex: 1,
+    // Margin/Gap được xử lý bởi parent container
+  },
+  pressable: {
+    flex: 1,
   },
   thumbnailContainer: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
+    width: '100%',
+    aspectRatio: 16 / 9, // Tỉ lệ chuẩn
     borderRadius: 12,
     overflow: 'hidden',
     backgroundColor: '#1a1a1a',
+    position: 'relative',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.05)',
   },
   thumbnail: {
     width: '100%',
@@ -132,56 +162,39 @@ const styles = StyleSheet.create({
   gradientOverlay: {
     ...StyleSheet.absoluteFillObject,
   },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  playButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(255, 107, 107, 0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingLeft: 2,
-    shadowColor: '#FF6B6B',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 6,
-  },
   timeBadge: {
     position: 'absolute',
-    bottom: 8,
+    bottom: 8, // Cao hơn thanh progress một chút
     right: 6,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
   timeText: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
+    fontSize: 11,
+    color: '#fff',
+    fontWeight: '600',
   },
   progressContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 3,
-    backgroundColor: 'rgba(255,255,255,0.15)',
   },
-  progressBar: {
+  progressBarBackground: {
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    width: '100%',
+  },
+  progressBarFill: {
     height: '100%',
-    borderRadius: 1.5,
   },
   title: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.85)',
+    fontSize: 13,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.9)',
     marginTop: 8,
-    lineHeight: 16,
+    lineHeight: 18,
   },
 });

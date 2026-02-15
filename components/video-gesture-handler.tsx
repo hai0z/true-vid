@@ -16,6 +16,7 @@ interface VideoGestureHandlerProps {
   volume: number;
   children: React.ReactNode;
   isLocked: boolean;
+  isDrawerOpen?: boolean; // Thêm prop để biết drawer có đang mở không
 }
 
 export function VideoGestureHandler({
@@ -23,6 +24,7 @@ export function VideoGestureHandler({
   volume,
   children,
   isLocked,
+  isDrawerOpen = false,
 }: VideoGestureHandlerProps) {
   const [showIndicator, setShowIndicator] = useState<'brightness' | 'volume' | null>(null);
   const [indicatorValue, setIndicatorValue] = useState(0);
@@ -32,16 +34,18 @@ export function VideoGestureHandler({
   const gestureType = useRef<'brightness' | 'volume' | null>(null);
   const currentBrightness = useRef(0.5);
 
-  // ✅ Dùng ref để luôn có giá trị volume mới nhất
   const currentVolumeRef = useRef(volume);
 
-  // ✅ Cập nhật ref mỗi khi volume thay đổi
   useEffect(() => {
     currentVolumeRef.current = volume;
   }, [volume]);
 
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
+
+  // ✅ Định nghĩa vùng 1/3
+  const LEFT_ZONE = screenWidth / 3;
+  const RIGHT_ZONE = (screenWidth * 2) / 3;
 
   const showIndicatorAnimation = useCallback(() => {
     Animated.timing(indicatorAnim, {
@@ -61,11 +65,26 @@ export function VideoGestureHandler({
     });
   }, [indicatorAnim]);
 
+  // ✅ Lưu vị trí X ban đầu để kiểm tra vùng
+  const startX = useRef(0);
+
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        if (isLocked) return false;
+      onMoveShouldSetPanResponder: (event, gestureState) => {
+        // ✅ Vô hiệu hóa nếu locked hoặc drawer đang mở
+        if (isLocked || isDrawerOpen) return false;
+
+        // ✅ Lấy vị trí X nơi người dùng chạm
+        const { locationX } = event.nativeEvent;
+
+        // ✅ Chỉ kích hoạt ở 1/3 trái hoặc 1/3 phải
+        // Vùng 1/3 giữa → bỏ qua, không bắt gesture
+        const isInLeftZone = locationX < LEFT_ZONE;
+        const isInRightZone = locationX > RIGHT_ZONE;
+
+        if (!isInLeftZone && !isInRightZone) return false;
+
         return (
           Math.abs(gestureState.dy) > 15 &&
           Math.abs(gestureState.dy) > Math.abs(gestureState.dx)
@@ -74,9 +93,10 @@ export function VideoGestureHandler({
       onPanResponderGrant: async (event) => {
         const { locationX } = event.nativeEvent;
         startY.current = event.nativeEvent.locationY;
+        startX.current = locationX;
 
-        if (locationX < screenWidth / 2) {
-          // Brightness - bên trái
+        // ✅ 1/3 bên trái → Brightness
+        if (locationX < LEFT_ZONE) {
           gestureType.current = 'brightness';
           try {
             const current = await Brightness.getBrightnessAsync();
@@ -85,11 +105,16 @@ export function VideoGestureHandler({
           } catch {
             startValue.current = 0.5;
           }
-        } else {
-          // Volume - bên phải
+        }
+        // ✅ 1/3 bên phải → Volume
+        else if (locationX > RIGHT_ZONE) {
           gestureType.current = 'volume';
-          // ✅ Lấy giá trị volume hiện tại từ ref thay vì closure cũ
           startValue.current = currentVolumeRef.current;
+        }
+        // ✅ 1/3 giữa → Không làm gì (safety check)
+        else {
+          gestureType.current = null;
+          return;
         }
 
         setShowIndicator(gestureType.current);

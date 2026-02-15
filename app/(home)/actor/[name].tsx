@@ -2,7 +2,6 @@ import { MovieCard } from '@/components/movie-card';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import actorsData from '@/constants/actors.json';
 import moviesData from '@/constants/movies.json';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Movie } from '@/types/Movie';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -26,7 +25,6 @@ interface Actor {
 
 export default function ActorDetailScreen() {
   const { name } = useLocalSearchParams<{ name: string }>();
-  const colorScheme = useColorScheme();
   const isDark = true; // Force dark mode
   const scrollY = useRef(new Animated.Value(0)).current;
 
