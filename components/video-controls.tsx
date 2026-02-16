@@ -143,7 +143,10 @@ export function VideoControls({
   // Thumbnail video player (hidden)
   const thumbnailVideoRef = useRef<Video>(null);
   const [thumbnailVideoReady, setThumbnailVideoReady] = useState(false);
-  const thumbnailSeekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  
+  // Serialization mechanism để tránh seek conflict
+  const isThumbnailSeekingRef = useRef(false);
+  const nextThumbnailSeekPosRef = useRef<number | null>(null);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -166,12 +169,52 @@ export function VideoControls({
   useEffect(() => {
     if (videoUrl) {
       console.log('🎬 Loading thumbnail video from m3u8:', videoUrl);
-      // M3U8 này là I-frame playlist, load vào hidden video player
+      // Reset states
       setThumbnailVideoReady(false);
+      isThumbnailSeekingRef.current = false;
+      nextThumbnailSeekPosRef.current = null;
     }
   }, [videoUrl]);
 
   // ── Logic ──
+
+  // Serialized thumbnail seek để tránh conflict
+  const processThumbnailSeek = useCallback(async (timeMs: number) => {
+    if (!thumbnailVideoRef.current || !thumbnailVideoReady) {
+      return;
+    }
+
+    // Nếu đang seek, lưu vị trí mới vào queue và return
+    if (isThumbnailSeekingRef.current) {
+      nextThumbnailSeekPosRef.current = timeMs;
+      return;
+    }
+
+    // Khóa
+    isThumbnailSeekingRef.current = true;
+
+    try {
+      await thumbnailVideoRef.current.setPositionAsync(timeMs, {
+        toleranceMillisBefore: 1000,
+        toleranceMillisAfter: 1000,
+      });
+    } catch (error: any) {
+      // Bỏ qua lỗi seek interrupted
+      if (!error?.message?.includes('interrupted')) {
+        console.log('Error seeking thumbnail:', error);
+      }
+    } finally {
+      // Mở khóa
+      isThumbnailSeekingRef.current = false;
+
+      // Kiểm tra queue: nếu có vị trí mới, seek tiếp
+      if (nextThumbnailSeekPosRef.current !== null) {
+        const nextTime = nextThumbnailSeekPosRef.current;
+        nextThumbnailSeekPosRef.current = null;
+        processThumbnailSeek(nextTime); // Đệ quy
+      }
+    }
+  }, [thumbnailVideoReady]);
 
   const resetHideTimer = useCallback(() => {
     if (hideTimer.current) clearTimeout(hideTimer.current);
@@ -264,11 +307,16 @@ export function VideoControls({
     seekValueRef.current = clamp(value, 0, safeDuration);
     setIsSeeking(true);
     setSeekDisplayTime(clamp(value, 0, safeDuration));
+    
+    // Reset queue khi bắt đầu seek
+    nextThumbnailSeekPosRef.current = null;
+    isThumbnailSeekingRef.current = false;
+    
     onSeekStart();
     if (hideTimer.current) clearTimeout(hideTimer.current);
   }, [safeDuration, onSeekStart]);
 
-  const handleValueChange = useCallback(async (value: number) => {
+  const handleValueChange = useCallback((value: number) => {
     if (!isSeekingRef.current) return;
     seekValueRef.current = clamp(value, 0, safeDuration);
     setSeekDisplayTime(seekValueRef.current);
@@ -277,36 +325,15 @@ export function VideoControls({
     const percentage = (seekValueRef.current / safeDuration) * 100;
     setSeekPreviewPosition(percentage);
     
-    // Debounce seek thumbnail video để tránh interrupt
-    if (thumbnailSeekTimeoutRef.current) {
-      clearTimeout(thumbnailSeekTimeoutRef.current);
-    }
-    
-    thumbnailSeekTimeoutRef.current = setTimeout(async () => {
-      if (thumbnailVideoRef.current && thumbnailVideoReady) {
-        try {
-          await thumbnailVideoRef.current.setPositionAsync(seekValueRef.current * 1000, {
-            toleranceMillisBefore: 1000,
-            toleranceMillisAfter: 1000,
-          });
-        } catch (err: any) {
-          // Bỏ qua lỗi "Seeking interrupted" vì đây là hành vi bình thường
-          if (!err?.message?.includes('interrupted')) {
-            console.log('Error seeking thumbnail video:', err);
-          }
-        }
-      }
-    }, 100); // Debounce 100ms
-  }, [safeDuration, thumbnailVideoReady]);
+    // Gọi serialized seek - tự động xử lý queue
+    processThumbnailSeek(seekValueRef.current * 1000);
+  }, [safeDuration, processThumbnailSeek]);
 
   const handleSlidingComplete = useCallback((value: number) => {
     onSeekComplete(clamp(value, 0, safeDuration));
     
-    // Clear debounce timeout khi hoàn thành seek
-    if (thumbnailSeekTimeoutRef.current) {
-      clearTimeout(thumbnailSeekTimeoutRef.current);
-      thumbnailSeekTimeoutRef.current = null;
-    }
+    // Clear queue
+    nextThumbnailSeekPosRef.current = null;
     
     setTimeout(() => {
       isSeekingRef.current = false;
