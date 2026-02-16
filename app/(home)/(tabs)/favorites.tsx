@@ -3,6 +3,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { likeVietSubs } from '@/constants/Data';
 import { useFavoritesStore } from '@/store/use-favorites-store';
 import { Ionicons } from '@expo/vector-icons';
+import { FlashList } from '@shopify/flash-list';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -63,30 +64,33 @@ const importData = useFavoritesStore((state) => state.importLegacyData);
           </Text>
         </View>
       ) : (
-        <Animated.FlatList
-          data={favorites}
-          keyExtractor={(item) => item.id}
-          numColumns={2}
-          columnWrapperStyle={styles.row}
-          contentContainerStyle={styles.listContent}
+        <Animated.ScrollView
+          contentContainerStyle={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true }
           )}
           scrollEventThrottle={16}
-          renderItem={({ item }) => (
-            <View style={styles.itemContainer}>
-              <MovieCard
-                id={item.id}
-                title={item.name}
-                poster={item.thumb_url}
-                variant="grid"
-                onPress={() => router.push(`/(home)/movie/${item.slug}` as any)}
-              />
-            </View>
-          )}
-        />
+        >
+          <FlashList
+            data={favorites}
+            keyExtractor={(item) => item.id}
+            numColumns={2}
+            contentContainerStyle={styles.listContent}
+            renderItem={({ item }) => (
+              <View style={styles.itemContainer}>
+                <MovieCard
+                  id={item.id}
+                  title={item.name}
+                  poster={item.thumb_url}
+                  variant="grid"
+                  onPress={() => router.push(`/(home)/movie/${item.slug}` as any)}
+                />
+              </View>
+            )}
+          />
+        </Animated.ScrollView>
       )}
     </View>
   );
@@ -152,15 +156,10 @@ const styles = StyleSheet.create({
     paddingTop: 108,
     paddingHorizontal: 12,
     paddingBottom: 80,
-    gap: 12,
-  },
-  row: {
-    gap: 12,
-    justifyContent: 'flex-start',
   },
   itemContainer: {
     flex: 1,
-    maxWidth: '50%',
+    padding: 6,
   },
   // ─── Empty State ──────────────────────
   emptyState: {

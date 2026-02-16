@@ -1,13 +1,13 @@
 import { HistoryCard } from '@/components/history-card';
 import { MovieCard } from '@/components/movie-card';
 import { MovieSlider } from '@/components/movie-slider';
-import { useMovies, useMoviesByCategory } from '@/hooks/use-movies';
+import { useLatestMovies, useMovies, useMoviesByCategory } from '@/hooks/use-movies';
 import { useWatchHistoryStore } from '@/store/use-watch-history-store';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -22,11 +22,30 @@ import {
 const HISTORY_CARD_WIDTH = 160;
 const HISTORY_CARD_HEIGHT = 100;
 
+// Config danh mục - dễ dàng thêm/bớt
+const CATEGORIES_CONFIG = [
+  { name: 'Mới cập nhật', slug: 'moi-cap-nhat', icon: 'language-outline' },
+  { name: 'Việt Sub', slug: 'vietsub', icon: 'language-outline' },
+  { name: 'Không Che', slug: 'khong-che', icon: 'eye-outline' },
+  { name: 'Châu Âu', slug: 'chau-au', icon: 'globe-outline' },
+  { name: 'Việt Nam', slug: 'viet-nam-clip', icon: 'flag-outline' },
+  { name: 'Trung Quốc', slug: 'trung-quoc', icon: 'earth-outline' },
+  { name: 'Hàn Quốc', slug: 'han-quoc-18-', icon: 'heart-outline' },
+  { name: 'Hentai', slug: 'hentai', icon: 'color-palette-outline' },
+];
+
 export default function MoviesScreen() {
   const router = useRouter();
   const scrollY = useRef(new Animated.Value(0)).current;
   const { history } = useWatchHistoryStore();
-  const { data: allMovies, isLoading: isLoadingAll } = useMovies(1);
+  
+  // Fetch slider (banner chính)
+  const { data: allMovies, isLoading: isLoadingSlider } = useMovies(1);
+  
+  // Fetch latest movies from new API
+  const { data: latestMovies, isLoading: isLoadingLatest } = useLatestMovies(1);
+  
+  // Fetch tất cả danh mục (React tự động chạy song song)
   const { data: vietnamMovies } = useMoviesByCategory('viet-nam-clip', 1);
   const { data: vietsubMovies } = useMoviesByCategory('vietsub', 1);
   const { data: europeMovies } = useMoviesByCategory('chau-au', 1);
@@ -36,23 +55,37 @@ export default function MoviesScreen() {
   const { data: javHdMovies } = useMoviesByCategory('jav-hd', 1);
   const { data: hentaiMovies } = useMoviesByCategory('hentai', 1);
 
-  const categoryData = [
-    { name: 'Việt Sub', slug: 'vietsub', movies: vietsubMovies?.movies || [], icon: 'language-outline' },
-    { name: 'JAV HD', slug: 'jav-hd', movies: javHdMovies?.movies || [], icon: 'film-outline' },
-    { name: 'Không Che', slug: 'khong-che', movies: uncensoredMovies?.movies || [], icon: 'eye-outline' },
-    { name: 'Châu Âu', slug: 'chau-au', movies: europeMovies?.movies || [], icon: 'globe-outline' },
-    { name: 'Việt Nam', slug: 'viet-nam-clip', movies: vietnamMovies?.movies || [], icon: 'flag-outline' },
-    { name: 'Trung Quốc', slug: 'trung-quoc', movies: chinaMovies?.movies || [], icon: 'earth-outline' },
-    { name: 'Hàn Quốc', slug: 'han-quoc-18-', movies: koreaMovies?.movies || [], icon: 'heart-outline' },
-    { name: 'Hentai', slug: 'hentai', movies: hentaiMovies?.movies || [], icon: 'color-palette-outline' },
-  ];
+  // Đề xuất JAV HD (lấy từ local data)
+  const recommendedMovies = useMemo(() => {
+    const moviesData = require('@/constants/movies.json');
+    const javHdMovies = moviesData.filter((movie: any) => 
+      movie.categories?.some((cat: any) => cat.slug === 'jav-hd')
+    );
+    // Shuffle và lấy 10 phim ngẫu nhiên
+    return javHdMovies.sort(() => Math.random() - 0.5).slice(0, 15);
+  }, []);
 
-  // Header opacity animation
-  const headerOpacity = scrollY.interpolate({
-    inputRange: [0, 100],
-    outputRange: [0, 1],
-    extrapolate: 'clamp',
-  });
+  // Gom dữ liệu bằng useMemo để tránh tính toán lại mỗi lần scroll
+  const sections = useMemo(() => {
+    const dataMap: Record<string, any> = {
+      'viet-nam-clip': vietnamMovies,
+      'vietsub': vietsubMovies,
+      'chau-au': europeMovies,
+      'trung-quoc': chinaMovies,
+      'han-quoc-18-': koreaMovies,
+      'khong-che': uncensoredMovies,
+      'jav-hd': javHdMovies,
+      'hentai': hentaiMovies,
+      'moi-cap-nhat': latestMovies
+    };
+
+    return CATEGORIES_CONFIG.map(cat => ({
+      ...cat,
+      movies: dataMap[cat.slug]?.movies || []
+    })).filter(section => section.movies.length > 0);
+  }, [vietnamMovies, vietsubMovies, europeMovies, chinaMovies, koreaMovies, uncensoredMovies, javHdMovies, hentaiMovies, latestMovies]);
+
+ 
 
   const headerBgOpacity = scrollY.interpolate({
     inputRange: [0, 150],
@@ -82,7 +115,7 @@ export default function MoviesScreen() {
                   <Ionicons name="play" size={16} color="#fff" />
                 </LinearGradient>
                 <Text  style={styles.headerTitle}>
-                  PhimHay
+                  AvTube
                 </Text>
               </View>
             </View>
@@ -108,7 +141,7 @@ export default function MoviesScreen() {
         )}
         scrollEventThrottle={16}
       >
-        {isLoadingAll ? (
+        {isLoadingSlider ? (
           <View style={styles.loadingContainer}>
             <View style={styles.loadingContent}>
               <ActivityIndicator size="large" color="#FF6B6B" />
@@ -121,7 +154,7 @@ export default function MoviesScreen() {
             {/* Hero Slider */}
             <View style={styles.sliderContainer}>
               <MovieSlider
-                movies={allMovies?.movies || []}
+                movies={recommendedMovies.slice(10,15)}
                 onPressMovie={(movie) =>
                   router.push(`/(home)/movie/${movie.slug}` as any)
                 }
@@ -134,6 +167,49 @@ export default function MoviesScreen() {
                 style={styles.sliderGradient}
               />
             </View>
+
+            {/* Recommended Section - JAV HD */}
+            {recommendedMovies.length > 0 && (
+              <View style={styles.sectionContainer}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionTitleRow}>
+                    <LinearGradient
+                      colors={['#FF6B6B', '#EE5A24']}
+                      style={styles.sectionIndicator}
+                    />
+                    <Ionicons name="star" size={18} color="#FFD700" style={styles.sectionIcon} />
+                    <Text style={styles.sectionTitle}>
+                      Đề xuất cho bạn
+                    </Text>
+                  </View>
+                </View>
+
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.movieScrollContent}
+                  decelerationRate="fast"
+                >
+                  {recommendedMovies.slice(0,9).map((movie: any, index: number) => (
+                    <View
+                      key={movie.id}
+                      style={styles.movieCardWrapper}
+                    >
+                      <MovieCard
+                        id={movie.id}
+                        title={movie.name}
+                        poster={movie.thumb_url}
+                        onPress={() =>
+                          router.push(
+                            `/(home)/movie/${movie.slug}` as any
+                          )
+                        }
+                      />
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
 
             {/* Watch History Section */}
             {history.length > 0 && (
@@ -149,6 +225,7 @@ export default function MoviesScreen() {
                     </Text>
                   </View>
                   <Pressable
+                    onPress={() => router.push('/(home)/history' as any)}
                     style={({ pressed }) => [
                       styles.clearHistoryButton,
                       pressed && styles.buttonPressed,
@@ -187,9 +264,8 @@ export default function MoviesScreen() {
             )}
 
             {/* Category Sections */}
-            {categoryData.map(
-              (category, index) =>
-                category.movies.length > 0 && (
+            {sections.map(
+              (category, index) => (
                   <View key={`${category.slug}-${index}`} style={styles.sectionContainer}>
                     <View style={styles.sectionHeader}>
                       <View style={styles.sectionTitleRow}>
@@ -229,7 +305,7 @@ export default function MoviesScreen() {
                       contentContainerStyle={styles.movieScrollContent}
                       decelerationRate="fast"
                     >
-                      {category.movies.slice(0, 10).map((movie, movieIndex) => (
+                      {category.movies.slice(0, 10).map((movie:any, movieIndex:number) => (
                         <View
                           key={movie.id}
                           style={[

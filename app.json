@@ -1,16 +1,17 @@
 {
   "expo": {
-    "name": "true-vid",
-    "slug": "true-vid",
+    "name": "AvTube",
+    "slug": "avtube",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
-    "scheme": "truevid",
+    "scheme": "avtube",
     "userInterfaceStyle": "dark",
     "backgroundColor": "#000000",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.hai0z.avtube",
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": true
@@ -18,6 +19,7 @@
       }
     },
     "android": {
+      "package": "com.hai0z.avtube",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

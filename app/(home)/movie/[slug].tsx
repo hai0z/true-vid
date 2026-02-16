@@ -1,7 +1,8 @@
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { useMovieDetail } from '@/hooks/use-movies';
+import { useMovieDetailBoth } from '@/hooks/use-movies';
 import { useFavoritesStore } from '@/store/use-favorites-store';
+import { useWatchHistoryStore } from '@/store/use-watch-history-store';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -10,8 +11,10 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 export default function MovieDetailScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const router = useRouter();
-  const { data, isLoading } = useMovieDetail(slug);
+  
+  const { data, isLoading } = useMovieDetailBoth(slug);
   const { favorites, addFavorite, removeFavorite } = useFavoritesStore();
+  const { history } = useWatchHistoryStore();
 
   if (isLoading) {
     return (
@@ -31,6 +34,13 @@ export default function MovieDetailScreen() {
 
   const movie = data.movie;
   const isFavorite = favorites.some(fav => fav.id === movie.id);
+  
+  // Check watch history
+  const watchHistory = history.find(h => h.movie.id === movie.id);
+  const hasWatched = !!watchHistory;
+  const watchProgress = watchHistory 
+    ? (watchHistory.position / watchHistory.duration) * 100 
+    : 0;
 
   const handleToggleFavorite = () => {
     if (isFavorite) {
@@ -38,6 +48,12 @@ export default function MovieDetailScreen() {
     } else {
       addFavorite(movie);
     }
+  };
+  
+  const formatWatchTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   return (
@@ -86,7 +102,9 @@ export default function MovieDetailScreen() {
             onPress={() => router.push(`/(home)/player/${movie.slug}` as any)}
           >
             <IconSymbol name="play.fill" size={20} color="#000" />
-            <Text style={styles.playButtonText}>Phát</Text>
+            <Text style={styles.playButtonText}>
+              {hasWatched ? 'Tiếp tục' : 'Phát'}
+            </Text>
           </Pressable>
 
           <Pressable 
@@ -100,6 +118,34 @@ export default function MovieDetailScreen() {
             />
           </Pressable>
         </View>
+
+        {hasWatched && (
+          <View style={styles.watchStatusContainer}>
+            <View style={styles.watchStatusHeader}>
+              <IconSymbol name="clock.fill" size={16} color="#FF6B6B" />
+              <Text style={styles.watchStatusText}>
+                Đã xem {watchProgress < 95 ? `${Math.round(watchProgress)}%` : 'hết'}
+                {watchHistory && watchProgress < 95 && (
+                  <Text style={styles.watchStatusTime}>
+                    {' '}• {formatWatchTime(watchHistory.position)} / {formatWatchTime(watchHistory.duration)}
+                  </Text>
+                )}
+              </Text>
+            </View>
+            {watchProgress < 95 && (
+              <View style={styles.progressBarContainer}>
+                <View style={styles.progressBarBackground}>
+                  <View 
+                    style={[
+                      styles.progressBarFill, 
+                      { width: `${watchProgress}%` }
+                    ]} 
+                  />
+                </View>
+              </View>
+            )}
+          </View>
+        )}
 
         {movie.content && (
           <View style={styles.section}>
@@ -292,5 +338,43 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#fff',
     opacity: 0.8,
+  },
+  watchStatusContainer: {
+    backgroundColor: 'rgba(255,107,107,0.1)',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255,107,107,0.2)',
+  },
+  watchStatusHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  watchStatusText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  watchStatusTime: {
+    fontSize: 13,
+    color: '#fff',
+    opacity: 0.7,
+    fontWeight: '400',
+  },
+  progressBarContainer: {
+    marginTop: 8,
+  },
+  progressBarBackground: {
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    backgroundColor: '#FF6B6B',
+    borderRadius: 2,
   },
 });

@@ -1,4 +1,9 @@
+import { MovieCard } from '@/components/movie-card';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import moviesData from '@/constants/movies.json';
+import { Movie } from '@/types/Movie';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FlashList } from "@shopify/flash-list";
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
@@ -14,11 +19,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-
-import { MovieCard } from '@/components/movie-card';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import moviesData from '@/constants/movies.json';
-import { Movie } from '@/types/Movie';
 
 // ─── Constants ────────────────────────────────────────────
 const SEARCH_HISTORY_KEY = 'movie_search_history';
@@ -394,18 +394,17 @@ export default function SearchScreen() {
         isSearching ? (
           renderSearching()
         ) : debouncedQuery.trim() && results.length > 0 ? (
-          <Animated.FlatList
+          <FlashList
             key="results-grid"  
             data={results}
             keyExtractor={(item) => item.id}
             numColumns={2}
             contentContainerStyle={styles.grid}
-            columnWrapperStyle={styles.gridRow}
             showsVerticalScrollIndicator={false}
             keyboardDismissMode="on-drag"
             onScroll={Animated.event(
               [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-              { useNativeDriver: true },
+              { useNativeDriver: false },
             )}
             scrollEventThrottle={16}
             ListHeaderComponent={
@@ -592,6 +591,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 30,
     gap: 12,
+    
   },
   gridRow: {
     gap: 12,
@@ -599,7 +599,8 @@ const styles = StyleSheet.create({
   },
   itemContainer: {
     flex: 1,
-    maxWidth: '50%',
+    paddingInline:6,
+    paddingBlock:6
   },
   resultBar: {
     paddingVertical: 12,

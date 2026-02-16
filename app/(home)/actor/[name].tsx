@@ -4,6 +4,7 @@ import actorsData from '@/constants/actors.json';
 import moviesData from '@/constants/movies.json';
 import { Movie } from '@/types/Movie';
 import { Ionicons } from '@expo/vector-icons';
+import { FlashList } from "@shopify/flash-list";
 import { BlurView } from 'expo-blur';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef } from 'react';
@@ -15,7 +16,6 @@ import {
   Text,
   View
 } from 'react-native';
-
 interface Actor {
   id: string;
   name: string;
@@ -117,16 +117,15 @@ export default function ActorDetailScreen() {
         </BlurView>
       </Animated.View>
 
-      <Animated.FlatList
+      <FlashList
         data={actorMovies}
         keyExtractor={(item) => item.id}
         numColumns={2}
-        columnWrapperStyle={styles.row}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
+       onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true },
+          { useNativeDriver: false },
         )}
         scrollEventThrottle={16}
         ListHeaderComponent={
@@ -249,7 +248,8 @@ const styles = StyleSheet.create({
   },
   itemContainer: {
     flex: 1,
-    maxWidth: '50%',
+    paddingInline:4,
+    paddingBlock:4
   },
   // ─── Empty State ──────────────────────
   emptyState: {

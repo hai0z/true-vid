@@ -1,9 +1,10 @@
 import { MovieCard } from '@/components/movie-card';
-import { useMoviesByCategory } from '@/hooks/use-movies';
+import { useLatestMovies, useMoviesByCategory } from '@/hooks/use-movies';
 import { Movie } from '@/types/Movie';
+import { FlashList } from '@shopify/flash-list';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 const CATEGORY_NAMES: Record<string, string> = {
   'viet-nam-clip': 'Việt Nam',
@@ -14,6 +15,7 @@ const CATEGORY_NAMES: Record<string, string> = {
   'khong-che': 'Không che',
   'jav-hd': 'JAV HD',
   'hentai': 'Hentai',
+  'moi-cap-nhat': 'Mới cập nhật',
 };
 
 export default function CategoryScreen() {
@@ -22,7 +24,15 @@ export default function CategoryScreen() {
   const [page, setPage] = useState(1);
   const [allMovies, setAllMovies] = useState<Movie[]>([]);
 
-  const { data, isLoading, isFetching } = useMoviesByCategory(slug, page);
+  // Nếu slug là 'moi-cap-nhat' thì dùng useLatestMovies (API mới), còn lại dùng useMoviesByCategory
+  const isNewUpdates = slug === 'moi-cap-nhat';
+  
+  const latestQuery = useLatestMovies(page);
+  const categoryQuery = useMoviesByCategory(slug, page);
+
+  const data = isNewUpdates ? latestQuery.data : categoryQuery.data;
+  const isLoading = isNewUpdates ? latestQuery.isLoading : categoryQuery.isLoading;
+  const isFetching = isNewUpdates ? latestQuery.isFetching : categoryQuery.isFetching;
 
   const categoryName = CATEGORY_NAMES[slug] || slug;
 
@@ -39,17 +49,26 @@ export default function CategoryScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: Movie }) => (
+  const renderItem = useCallback(({ item }: { item: Movie }) => (
     <View style={styles.itemContainer}>
       <MovieCard
         id={item.id}
         title={item.name}
         poster={item.thumb_url}
-        variant="grid" // ✅ Quan trọng: Dùng vertical cho lưới 2 cột
+        variant="grid"
         onPress={() => router.push(`/(home)/movie/${item.slug}` as any)}
       />
     </View>
-  );
+  ), [router]);
+
+  const renderFooter = useCallback(() => {
+    if (!isFetching || page === 1) return <View style={{ height: 20 }} />;
+    return (
+      <View style={styles.footerLoader}>
+        <ActivityIndicator color="#fff" />
+      </View>
+    );
+  }, [isFetching, page]);
 
   return (
     <View style={styles.container}>
@@ -67,28 +86,16 @@ export default function CategoryScreen() {
           <ActivityIndicator size="large" color="#fff" />
         </View>
       ) : (
-        <FlatList
+        <FlashList
           data={allMovies}
           keyExtractor={(item, index) => `${item.id}-${index}`}
-          
-          // Cấu hình Grid 2 cột
           numColumns={2}
-          columnWrapperStyle={styles.row} // Style cho hàng ngang (khoảng cách giữa 2 cột)
-          
           contentContainerStyle={styles.listContent}
           renderItem={renderItem}
-          
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
-          
-          // Loader ở cuối khi cuộn
-          ListFooterComponent={
-            isFetching && page > 1 ? (
-              <View style={styles.footerLoader}>
-                <ActivityIndicator color="#fff" />
-              </View>
-            ) : <View style={{ height: 20 }} /> // Spacer dưới cùng
-          }
+          ListFooterComponent={renderFooter}
+          removeClippedSubviews={true}
         />
       )}
     </View>
@@ -105,18 +112,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   listContent: {
-    paddingHorizontal: 12, // Khoảng cách lề trái phải toàn màn hình
-    paddingTop: 110,       // Khoảng cách cho Header trong suốt (chỉnh số này nếu header che mất item)
+    paddingHorizontal: 12,
+    paddingTop: 110,
     paddingBottom: 40,
-    gap: 12,               // Khoảng cách dọc giữa các hàng (React Native 0.71+)
-  },
-  row: {
-    gap: 12,               // Khoảng cách ngang giữa 2 cột
-    justifyContent: 'flex-start', // Căn trái để tránh bị giãn khi hàng lẻ 1 item
   },
   itemContainer: {
-    flex: 1,               // Chia đều không gian
-    maxWidth: '50%',       // Giới hạn chiều rộng để không bị vỡ layout
+    flex: 1,
+    padding: 6, // Khoảng cách giữa các items
   },
   footerLoader: {
     paddingVertical: 20,

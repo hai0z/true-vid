@@ -2,12 +2,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Animated,
-    Easing,
-    Pressable,
-    StyleSheet,
-    Text,
-    View,
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
 interface ResumeOverlayProps {
@@ -38,8 +38,8 @@ export function ResumeOverlay({
   const countdownBarAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [countdown, setCountdown] = useState(countdownSeconds);
-  const timerRef = useRef<NodeJS.Timeout>();
-  const countdownRef = useRef<NodeJS.Timeout>();
+  const timerRef = useRef<number>(null);
+  const countdownRef = useRef<number>(null);
 
   const progressPercent = duration > 0 ? (savedPosition / duration) * 100 : 0;
 
@@ -90,7 +90,7 @@ export function ResumeOverlay({
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
         if (prev <= 1) {
-          clearInterval(countdownRef.current);
+          clearInterval(countdownRef.current!);
           return 0;
         }
         return prev - 1;
@@ -193,17 +193,7 @@ export function ResumeOverlay({
         </View>
 
         {/* Progress bar */}
-        <View style={styles.progressContainer}>
-          <View style={styles.progressBg}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${Math.min(progressPercent, 100)}%` },
-              ]}
-            />
-          </View>
-          <Text style={styles.percentText}>{Math.round(progressPercent)}%</Text>
-        </View>
+       
 
         {/* Buttons */}
         <View style={styles.buttonRow}>

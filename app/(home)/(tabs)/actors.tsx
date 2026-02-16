@@ -1,5 +1,6 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import actorsData from '@/constants/actors.json';
+import { FlashList } from '@shopify/flash-list';
 import { BlurView } from 'expo-blur';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,7 +30,7 @@ interface Actor {
 // ─── Constants ───
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMNS = 2; // Số cột
-const SPACING = 8;
+const SPACING = 16;
 const HORIZONTAL_PADDING = 12;
 const ITEMS_PER_PAGE = 24; // Số lượng load mỗi lần
 
@@ -208,8 +209,7 @@ export default function ActorsScreen() {
           <Text style={styles.emptyText}>Không tìm thấy kết quả</Text>
         </View>
       ) : (
-        <Animated.FlatList
-          ref={listRef}
+        <FlashList
           data={visibleData}
           keyExtractor={(item) => item.id}
           numColumns={COLUMNS}
@@ -218,12 +218,11 @@ export default function ActorsScreen() {
             paddingBottom: 80, // Để chừa chỗ cho footer
             paddingHorizontal: HORIZONTAL_PADDING,
           }}
-          columnWrapperStyle={{ gap: SPACING }}
           ItemSeparatorComponent={() => <View style={{ height: SPACING }} />}
           showsVerticalScrollIndicator={false}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true },
+            { useNativeDriver: false },
           )}
           scrollEventThrottle={16}
           renderItem={renderItem}
@@ -277,6 +276,7 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     borderRadius: 12, overflow: 'hidden',
     backgroundColor: '#1A1A1A',
+  
   },
   imageWrapper: { width: '100%', aspectRatio: 16/9 },
   actorImage: { width: '100%', height: '100%' },

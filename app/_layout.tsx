@@ -6,14 +6,6 @@ import { useState } from 'react';
 import 'react-native-reanimated';
 
 
-// Enable network logging in development
-if (__DEV__) {
-  // enableNetworkLogger();
-}
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
 
 export default function RootLayout() {
   const [queryClient] = useState(() => new QueryClient({
@@ -30,7 +22,6 @@ export default function RootLayout() {
       <ThemeProvider value={DarkTheme}>
         <Stack screenOptions={{
           headerShown:false,
-          contentStyle: { backgroundColor: '#000' }, 
         }}>
           <Stack.Screen name="(home)/(tabs)" options={{ headerShown: false }} />
         </Stack>

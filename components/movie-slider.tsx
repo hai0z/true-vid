@@ -1,7 +1,7 @@
 import { Movie } from '@/types/Movie';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { IconSymbol } from './ui/icon-symbol';
 
@@ -15,9 +15,48 @@ interface MovieSliderProps {
   onPressPlay?: (movie: Movie) => void;
 }
 
+// Hàm lấy seed dựa trên ngày hiện tại
+const getDailySeed = () => {
+  const today = new Date();
+  return `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+};
+
+// Hàm shuffle với seed để có kết quả nhất quán trong ngày
+const seededShuffle = (array: any[], seed: string) => {
+  const arr = [...array];
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+    hash = hash & hash;
+  }
+  
+  const random = (max: number) => {
+    hash = (hash * 9301 + 49297) % 233280;
+    return (hash / 233280) * max;
+  };
+  
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(random(i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+};
+
 export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
+
+  // Lấy phim JAV HD ngẫu nhiên, cố định theo ngày
+  const dailyMovies = useMemo(() => {
+    const moviesData = require('@/constants/movies.json');
+    const javHdMovies = moviesData.filter((movie: any) => 
+      movie.categories?.some((cat: any) => cat.slug === 'jav-hd')
+    );
+    
+    const seed = getDailySeed();
+    const shuffled = seededShuffle(javHdMovies, seed);
+    return shuffled.slice(0, 5);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -90,9 +129,9 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
                         <Text style={styles.qualityText}>{movie.quality}</Text>
                       </View>
                     )}
-                    {movie.status && (
+                    {movie.lang && (
                       <View style={styles.statusBadge}>
-                        <Text style={styles.statusText}>{movie.status}</Text>
+                        <Text style={styles.statusText}>{movie.lang}</Text>
                       </View>
                     )}
                   </View>
@@ -120,13 +159,7 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
                     )}
                   </View>
 
-                  {/* Description */}
-                  {movie.content && (
-                    <Text style={styles.description} numberOfLines={3}>
-                      {movie.content.replace(/<[^>]*>/g, '')}
-                    </Text>
-                  )}
-
+                 
                   {/* Action Buttons */}
                   <View style={styles.actions}>
                     <Pressable 
@@ -251,9 +284,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 8,
+    
     letterSpacing: -0.5,
   },
   metaContainer: {
@@ -280,6 +311,7 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: 10,
+    paddingTop:16
   },
   playButton: {
     flexDirection: 'row',
@@ -322,6 +354,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     gap: 6,
+    zIndex:999
   },
   dot: {
     width: 8,

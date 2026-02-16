@@ -3,7 +3,8 @@ import { VideoControls } from '@/components/video-controls';
 import { VideoGestureHandler } from '@/components/video-gesture-handler';
 import { VideoLoadingScreen } from '@/components/video-loading-screen';
 import moviesData from '@/constants/movies.json';
-import { useMovieDetail } from '@/hooks/use-movies';
+import { useMovieDetailBoth } from '@/hooks/use-movies';
+import { useSettingsStore } from '@/store/use-settings-store';
 import { useWatchHistoryStore } from '@/store/use-watch-history-store';
 import { Movie } from '@/types/Movie';
 import { AVPlaybackStatus, ResizeMode, Video } from 'expo-av';
@@ -13,66 +14,127 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
+// ✅ Type definitions
+interface PlaybackState {
+  isPlaying: boolean;
+  currentTime: number;
+  duration: number;
+  buffered: number;
+  isBuffering: boolean;
+}
+
+interface VolumeState {
+  volume: number;
+  isMuted: boolean;
+}
+
+// ✅ Seeded random để kết quả ổn định trong cùng 1 render cycle
+function seededShuffle<T>(array: T[], seed: number): T[] {
+  const result = [...array];
+  let currentSeed = seed;
+  
+  const random = () => {
+    currentSeed = (currentSeed * 9301 + 49297) % 233280;
+    return currentSeed / 233280;
+  };
+  
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  
+  return result;
+}
+
 export default function PlayerScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const { data } = useMovieDetail(slug);
+  const { data } = useMovieDetailBoth(slug);
   const { addToHistory, getPosition } = useWatchHistoryStore();
   const router = useRouter();
 
-  // ===== Loading states =====
-  const [m3u8Url, setM3u8Url] = useState<string | null>(null);
-  const [videoError, setVideoError] = useState<string | null>(null);
-  const [isLoadingVideo, setIsLoadingVideo] = useState(true);
-  const [loadingStep, setLoadingStep] = useState<
-    'connecting' | 'extracting' | 'preparing' | 'ready'
-  >('connecting');
+  // ===== Settings =====
+  const settings = useSettingsStore();
+  const {
+    autoPlay,
+    defaultPlaybackSpeed,
+    defaultVolume,
+    skipDuration,
+    doubleTapSkipDuration,
+    autoResume,
+    resumeThreshold,
+  } = settings;
+
+  // ===== Loading states (gộp lại) =====
+  const [loadingState, setLoadingState] = useState({
+    m3u8Url: null as string | null,
+    videoError: null as string | null,
+    isLoadingVideo: true,
+    step: 'connecting' as 'connecting' | 'extracting' | 'preparing' | 'ready',
+  });
 
   // ===== Resume states =====
-  const [showResumePrompt, setShowResumePrompt] = useState(false);
-  const [savedResumePosition, setSavedResumePosition] = useState(0);
-  const [isVideoReady, setIsVideoReady] = useState(false);
+  const [resumeState, setResumeState] = useState({
+    showPrompt: false,
+    savedPosition: 0,
+    isVideoReady: false,
+  });
 
-  // ===== Playback states =====
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [buffered, setBuffered] = useState(0);
-  const [isBuffering, setIsBuffering] = useState(false);
-  const [volume, setVolume] = useState(0);
-  const [isMuted, setIsMuted] = useState(volume === 0);
+  // ===== Playback states (gộp lại) =====
+  const [playback, setPlayback] = useState<PlaybackState>({
+    isPlaying: autoPlay,
+    currentTime: 0,
+    duration: 0,
+    buffered: 0,
+    isBuffering: false,
+  });
+
+  // ===== Volume state (gộp lại) =====
+  const [volumeState, setVolumeState] = useState<VolumeState>({
+    volume: defaultVolume,
+    isMuted: defaultVolume === 0,
+  });
+
+  // ===== UI states =====
   const [isLocked, setIsLocked] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
-
-  // ===== Drawer state =====
+  const [playbackSpeed, setPlaybackSpeed] = useState(defaultPlaybackSpeed);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [showRelatedMenu, setShowRelatedMenu] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
 
-  // ===== Transition animation =====
+  // ===== Refs =====
   const playerFadeAnim = useRef(new Animated.Value(0)).current;
-
   const videoRef = useRef<Video>(null);
   const lastSavedPosition = useRef(0);
   const isSeeking = useRef(false);
+  const seekTargetRef = useRef<number | null>(null);
   const volumeSynced = useRef(false);
+  const isMounted = useRef(true);
   
-  // Serialization cho video chính để tránh crash
+  // Serialization cho seek
   const isMainSeekingRef = useRef(false);
   const nextMainSeekTimeRef = useRef<number | null>(null);
 
-  // ===== Related Videos =====
+  // ✅ Refs cho callbacks (tránh stale closures)
+  const volumeStateRef = useRef(volumeState);
+  volumeStateRef.current = volumeState;
+
+  // ===== Related Videos (với seeded random) =====
   const relatedVideos = useMemo(() => {
     if (!data?.movie) return [];
     
     const allMovies = moviesData as Movie[];
     const currentMovie = data.movie;
     
-    // 1. Phim cùng diễn viên
+    // Tạo seed từ movie ID để shuffle ổn định
+    const seed = currentMovie.id.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    
+    // Phim cùng diễn viên
     const sameActorMovies = allMovies.filter(movie => {
       if (movie.id === currentMovie.id) return false;
       return movie.actors.some(actor => currentMovie.actors.includes(actor));
     });
     
-    // 2. Phim cùng thể loại
+    // Phim cùng thể loại
     const sameCategoryMovies = allMovies.filter(movie => {
       if (movie.id === currentMovie.id) return false;
       return movie.categories.some(cat =>
@@ -80,22 +142,25 @@ export default function PlayerScreen() {
       );
     });
     
-    // 3. Phim ngẫu nhiên
-    const randomMovies = allMovies.filter(movie => movie.id !== currentMovie.id);
+    // Phim còn lại (shuffle với seed)
+    const otherMovies = allMovies.filter(
+      movie => movie.id !== currentMovie.id &&
+        !sameActorMovies.includes(movie) &&
+        !sameCategoryMovies.includes(movie)
+    );
+    const shuffledOthers = seededShuffle(otherMovies, seed);
     
-    // Kết hợp: ưu tiên cùng diễn viên > cùng thể loại > ngẫu nhiên
+    // Kết hợp và loại trùng
     const combined = [
-      ...sameActorMovies.slice(0, 50),
-      ...sameCategoryMovies.slice(0, 50),
-      ...randomMovies.sort(() => Math.random() - 0.5).slice(0, 50),
+      ...sameActorMovies.slice(0, 15),
+      ...sameCategoryMovies.slice(0, 15),
+      ...shuffledOthers.slice(0, 10),
     ];
     
-    // Loại bỏ trùng lặp và lấy 20 phim
     const uniqueMovies = Array.from(
       new Map(combined.map(movie => [movie.id, movie])).values()
     ).slice(0, 35);
     
-    // Map sang RelatedVideo format
     return uniqueMovies.map(movie => ({
       id: movie.id,
       name: movie.name,
@@ -103,18 +168,19 @@ export default function PlayerScreen() {
       thumb_url: movie.thumb_url,
       time: movie.time,
       actors: movie.actors,
-    })).sort(()=>Math.random()-0.5);
+    }));
   }, [data?.movie]);
 
   // ===== Screen Orientation =====
   useFocusEffect(
     useCallback(() => {
-      let isMounted = true;
+      isMounted.current = true;
+      let orientationSubscription: ScreenOrientation.Subscription | null = null;
 
       const lockLandscape = async () => {
         try {
           await new Promise(resolve => setTimeout(resolve, 200));
-          if (isMounted) {
+          if (isMounted.current) {
             await ScreenOrientation.lockAsync(
               ScreenOrientation.OrientationLock.LANDSCAPE
             );
@@ -124,34 +190,56 @@ export default function PlayerScreen() {
         }
       };
 
+      const setupOrientationListener = () => {
+        orientationSubscription = ScreenOrientation.addOrientationChangeListener(
+          (event) => {
+            const orientation = event.orientationInfo.orientation;
+            if (
+              orientation === ScreenOrientation.Orientation.PORTRAIT_UP ||
+              orientation === ScreenOrientation.Orientation.PORTRAIT_DOWN
+            ) {
+              setIsExiting(true);
+            }
+          }
+        );
+      };
+
       lockLandscape();
+      setupOrientationListener();
+
       return () => {
-        isMounted = false;
+        isMounted.current = false;
+        if (orientationSubscription) {
+          ScreenOrientation.removeOrientationChangeListener(orientationSubscription);
+        }
       };
     }, [])
   );
 
   // ===== WebView M3U8 Extraction =====
-  const handleWebViewMessage = (event: any) => {
+  const handleWebViewMessage = useCallback((event: any) => {
+    if (!isMounted.current) return;
+    
     try {
       const messageData = JSON.parse(event.nativeEvent.data);
 
       if (messageData.type === 'step_update') {
-        setLoadingStep(messageData.step);
+        setLoadingState(prev => ({ ...prev, step: messageData.step }));
       }
 
-      if (messageData.type === 'm3u8_found' && !m3u8Url) {
+      if (messageData.type === 'm3u8_found' && !loadingState.m3u8Url) {
         const url = messageData.url;
         console.log('🎬 M3U8 URL Found:', url);
-        setLoadingStep('preparing');
-        setM3u8Url(url);
+        
+        setLoadingState(prev => ({ ...prev, step: 'preparing', m3u8Url: url }));
 
-        // Delay nhỏ để hiển thị step "preparing" trước khi chuyển
         setTimeout(() => {
-          setLoadingStep('ready');
-          // Fade transition sang player
+          if (!isMounted.current) return;
+          setLoadingState(prev => ({ ...prev, step: 'ready' }));
+          
           setTimeout(() => {
-            setIsLoadingVideo(false);
+            if (!isMounted.current) return;
+            setLoadingState(prev => ({ ...prev, isLoadingVideo: false }));
             Animated.timing(playerFadeAnim, {
               toValue: 1,
               duration: 500,
@@ -163,130 +251,17 @@ export default function PlayerScreen() {
     } catch (error) {
       console.log('Error parsing WebView message:', error);
     }
-  };
+  }, [loadingState.m3u8Url, playerFadeAnim]);
 
-  // ===== Video Load Handler =====
-  const handleVideoLoad = async () => {
-    console.log('✅ Video loaded successfully');
-    setIsVideoReady(true);
-
-    if (videoRef.current) {
-      // Đồng bộ volume thực tế từ player
-      const status = await videoRef.current.getStatusAsync();
-      if (status.isLoaded && !volumeSynced.current) {
-        const realVolume = status.volume ?? 1;
-        setVolume(realVolume);
-        setIsMuted(status.isMuted ?? false);
-        volumeSynced.current = true;
-      }
-    }
-
-    // ✅ Kiểm tra có vị trí đã lưu không
-    if (data?.movie) {
-      const saved = getPosition(data.movie.id);
-      // Chỉ show resume nếu đã xem > 30 giây và chưa xem gần hết (< 95%)
-      const status = await videoRef.current?.getStatusAsync();
-      const totalDuration = status?.isLoaded
-        ? (status.durationMillis ?? 0) / 1000
-        : 0;
-
-      const hasSignificantProgress = saved > 30;
-      const hasNotFinished =
-        totalDuration > 0 ? saved / totalDuration < 0.95 : true;
-
-      if (hasSignificantProgress && hasNotFinished) {
-        setSavedResumePosition(saved);
-        setDuration(totalDuration);
-        setShowResumePrompt(true);
-
-        // Pause video trong khi chờ user chọn
-        await videoRef.current?.pauseAsync();
-      }
-    }
-  };
-
-  // ===== Resume Handlers =====
-  const handleResume = useCallback(async () => {
-    setShowResumePrompt(false);
-    if (videoRef.current && savedResumePosition > 0) {
-      console.log('⏩ Resuming from:', savedResumePosition.toFixed(0), 's');
-
-      // Chặn status update trong lúc seek
-      isSeeking.current = true;
-      setCurrentTime(savedResumePosition);
-
-      await videoRef.current.setPositionAsync(savedResumePosition * 1000, {
-        toleranceMillisBefore: 0,
-        toleranceMillisAfter: 0,
-      });
-      await videoRef.current.playAsync();
-
-      setTimeout(() => {
-        isSeeking.current = false;
-      }, 200);
-    }
-  }, [savedResumePosition]);
-
-  const handleStartOver = useCallback(async () => {
-    setShowResumePrompt(false);
-    if (videoRef.current) {
-      console.log('🔄 Starting from beginning');
-
-      isSeeking.current = true;
-      setCurrentTime(0);
-
-      await videoRef.current.setPositionAsync(0);
-      await videoRef.current.playAsync();
-
-      setTimeout(() => {
-        isSeeking.current = false;
-      }, 200);
-    }
-  }, []);
-
-  // ===== Playback Status Update =====
-  const handlePlaybackStatusUpdate = useCallback(
-    (status: AVPlaybackStatus) => {
-      if (!status.isLoaded) return;
-
-      if (!isSeeking.current) {
-        setCurrentTime(status.positionMillis / 1000);
-      }
-
-      setDuration(status.durationMillis ? status.durationMillis / 1000 : 0);
-      setIsPlaying(status.isPlaying);
-      setIsBuffering(status.isBuffering);
-
-      if (status.playableDurationMillis) {
-        setBuffered(status.playableDurationMillis / 1000);
-      }
-
-      // Save history mỗi 5 giây
-      if (data?.movie) {
-        const position = status.positionMillis / 1000;
-        const dur = status.durationMillis ? status.durationMillis / 1000 : 0;
-        if (Math.abs(position - lastSavedPosition.current) >= 5) {
-          lastSavedPosition.current = position;
-          addToHistory(data.movie, position, dur);
-        }
-      }
-    },
-    [data, addToHistory]
-  );
-
-  // ===== Control Handlers =====
-  
-  // Safe seek với serialization để tránh crash
+  // ===== Safe Seek với serialization =====
   const safeMainSeek = useCallback(async (timeMs: number) => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !isMounted.current) return;
 
-    // Nếu đang seek, lưu vào queue
     if (isMainSeekingRef.current) {
       nextMainSeekTimeRef.current = timeMs;
       return;
     }
 
-    // Khóa
     isMainSeekingRef.current = true;
 
     try {
@@ -297,18 +272,168 @@ export default function PlayerScreen() {
     } catch (error) {
       console.log('Seek error ignored:', error);
     } finally {
-      // Mở khóa
       isMainSeekingRef.current = false;
 
-      // Kiểm tra queue
-      if (nextMainSeekTimeRef.current !== null) {
+      if (nextMainSeekTimeRef.current !== null && isMounted.current) {
         const nextTime = nextMainSeekTimeRef.current;
         nextMainSeekTimeRef.current = null;
         safeMainSeek(nextTime);
       }
     }
   }, []);
-  
+
+  // ===== Video Load Handler =====
+  const handleVideoLoad = useCallback(async () => {
+    if (!isMounted.current) return;
+    console.log('✅ Video loaded successfully');
+    
+    setResumeState(prev => ({ ...prev, isVideoReady: true }));
+
+    if (videoRef.current) {
+      try {
+        await videoRef.current.setVolumeAsync(defaultVolume);
+        await videoRef.current.setRateAsync(defaultPlaybackSpeed, true);
+        
+        if (!volumeSynced.current) {
+          setVolumeState({ volume: defaultVolume, isMuted: defaultVolume === 0 });
+          volumeSynced.current = true;
+        }
+      } catch (error) {
+        console.log('Error setting initial video state:', error);
+      }
+    }
+
+    // Kiểm tra resume
+    if (data?.movie && autoResume) {
+      const saved = getPosition(data.movie.id);
+      const status = await videoRef.current?.getStatusAsync();
+      const totalDuration = status?.isLoaded
+        ? (status.durationMillis ?? 0) / 1000
+        : 0;
+
+      const hasSignificantProgress = saved > resumeThreshold;
+      const hasNotFinished = totalDuration > 0 ? saved / totalDuration < 0.95 : true;
+
+      if (hasSignificantProgress && hasNotFinished) {
+        setResumeState({
+          showPrompt: true,
+          savedPosition: saved,
+          isVideoReady: true,
+        });
+        setPlayback(prev => ({ ...prev, duration: totalDuration }));
+        await videoRef.current?.pauseAsync();
+        return;
+      }
+    }
+
+    // Không có resume
+    if (videoRef.current) {
+      if (autoPlay) {
+        await videoRef.current.playAsync();
+      } else {
+        await videoRef.current.pauseAsync();
+      }
+    }
+  }, [data?.movie, autoResume, autoPlay, defaultVolume, defaultPlaybackSpeed, getPosition, resumeThreshold]);
+
+  // ===== Resume Handlers =====
+  const handleResume = useCallback(async () => {
+    if (!isMounted.current) return;
+    
+    setResumeState(prev => ({ ...prev, showPrompt: false }));
+    
+    if (videoRef.current && resumeState.savedPosition > 0) {
+      console.log('⏩ Resuming from:', resumeState.savedPosition.toFixed(0), 's');
+
+      isSeeking.current = true;
+      seekTargetRef.current = resumeState.savedPosition;
+      setPlayback(prev => ({ ...prev, currentTime: resumeState.savedPosition }));
+
+      await videoRef.current.setPositionAsync(resumeState.savedPosition * 1000, {
+        toleranceMillisBefore: 0,
+        toleranceMillisAfter: 0,
+      });
+      await videoRef.current.playAsync();
+      isSeeking.current = false;
+
+      setTimeout(() => {
+        seekTargetRef.current = null;
+      }, 3000);
+    }
+  }, [resumeState.savedPosition]);
+
+  const handleStartOver = useCallback(async () => {
+    if (!isMounted.current) return;
+    
+    setResumeState(prev => ({ ...prev, showPrompt: false }));
+    
+    if (videoRef.current) {
+      console.log('🔄 Starting from beginning');
+
+      isSeeking.current = true;
+      seekTargetRef.current = 0;
+      setPlayback(prev => ({ ...prev, currentTime: 0 }));
+
+      await videoRef.current.setPositionAsync(0);
+      await videoRef.current.playAsync();
+      isSeeking.current = false;
+
+      setTimeout(() => {
+        seekTargetRef.current = null;
+      }, 3000);
+    }
+  }, []);
+
+  // ===== Playback Status Update =====
+  const handlePlaybackStatusUpdate = useCallback(
+    (status: AVPlaybackStatus) => {
+      if (!status.isLoaded || !isMounted.current) return;
+
+      const reportedTime = status.positionMillis / 1000;
+
+      // ✅ Quyết định có chấp nhận position từ native hay không
+      let acceptPosition = true;
+
+      if (isSeeking.current) {
+        // Đang kéo slider → không chấp nhận
+        acceptPosition = false;
+      } else if (seekTargetRef.current !== null) {
+        // Vừa seek xong → chỉ chấp nhận khi position đã khớp với đích
+        if (Math.abs(reportedTime - seekTargetRef.current) < 1.5) {
+          // Video đã seek đến đúng chỗ → xoá guard, chấp nhận
+          seekTargetRef.current = null;
+          acceptPosition = true;
+        } else {
+          // Video chưa đến đích → giữ nguyên currentTime cũ (không giật)
+          acceptPosition = false;
+        }
+      }
+
+      setPlayback(prev => ({
+        ...prev,
+        currentTime: acceptPosition ? reportedTime : prev.currentTime,
+        duration: status.durationMillis ? status.durationMillis / 1000 : prev.duration,
+        isPlaying: status.isPlaying,
+        isBuffering: status.isBuffering,
+        buffered: status.playableDurationMillis 
+          ? status.playableDurationMillis / 1000 
+          : prev.buffered,
+      }));
+
+      // Save history mỗi 5 giây
+      if (data?.movie) {
+        const position = reportedTime;
+        const dur = status.durationMillis ? status.durationMillis / 1000 : 0;
+        if (Math.abs(position - lastSavedPosition.current) >= 5) {
+          lastSavedPosition.current = position;
+          addToHistory(data.movie, position, dur);
+        }
+      }
+    },
+    [data?.movie, addToHistory]
+  );
+
+  // ===== Control Handlers =====
   const handlePlayPause = useCallback(async () => {
     if (!videoRef.current) return;
     const status = await videoRef.current.getStatusAsync();
@@ -322,7 +447,7 @@ export default function PlayerScreen() {
   }, []);
 
   const handleSeek = useCallback((time: number) => {
-    setCurrentTime(time);
+    setPlayback(prev => ({ ...prev, currentTime: time }));
   }, []);
 
   const handleSeekStart = useCallback(() => {
@@ -330,66 +455,58 @@ export default function PlayerScreen() {
   }, []);
 
   const handleSeekComplete = useCallback(async (time: number) => {
-    // Sử dụng safeMainSeek thay vì gọi trực tiếp
-    safeMainSeek(time * 1000);
+    seekTargetRef.current = time;
+    await safeMainSeek(time * 1000);
+    isSeeking.current = false;
     
-    // Delay để mở lại status update
+    // Fallback: tự xoá guard sau 3s phòng trường hợp position ko bao giờ khớp
     setTimeout(() => {
-      isSeeking.current = false;
-    }, 200);
+      seekTargetRef.current = null;
+    }, 3000);
   }, [safeMainSeek]);
 
-  const handleSkipForward = useCallback(async () => {
+  const handleSkip = useCallback(async (direction: 'forward' | 'backward', seconds: number) => {
     if (!videoRef.current) return;
     const status = await videoRef.current.getStatusAsync();
-    if (status.isLoaded) {
-      const newPos = Math.min(
-        status.positionMillis + 10000,
-        status.durationMillis || status.positionMillis
-      );
+    if (!status.isLoaded) return;
 
-      isSeeking.current = true;
-      setCurrentTime(newPos / 1000);
+    const delta = direction === 'forward' ? seconds * 1000 : -seconds * 1000;
+    const newPos = Math.max(0, Math.min(
+      status.positionMillis + delta,
+      status.durationMillis || status.positionMillis
+    ));
 
-      // Sử dụng safeMainSeek
-      safeMainSeek(newPos);
+    const newTime = newPos / 1000;
+    isSeeking.current = true;
+    seekTargetRef.current = newTime;
+    setPlayback(prev => ({ ...prev, currentTime: newTime }));
+    await safeMainSeek(newPos);
+    isSeeking.current = false;
 
-      setTimeout(() => {
-        isSeeking.current = false;
-      }, 200);
-    }
+    setTimeout(() => {
+      seekTargetRef.current = null;
+    }, 3000);
   }, [safeMainSeek]);
 
-  const handleSkipBackward = useCallback(async () => {
-    if (!videoRef.current) return;
-    const status = await videoRef.current.getStatusAsync();
-    if (status.isLoaded) {
-      const newPos = Math.max(status.positionMillis - 10000, 0);
-
-      isSeeking.current = true;
-      setCurrentTime(newPos / 1000);
-
-      // Sử dụng safeMainSeek
-      safeMainSeek(newPos);
-
-      setTimeout(() => {
-        isSeeking.current = false;
-      }, 200);
-    }
-  }, [safeMainSeek]);
+  const handleSkipForward = useCallback(() => handleSkip('forward', skipDuration), [handleSkip, skipDuration]);
+  const handleSkipBackward = useCallback(() => handleSkip('backward', skipDuration), [handleSkip, skipDuration]);
+  const handleDoubleTapLeft = useCallback(() => handleSkip('backward', doubleTapSkipDuration), [handleSkip, doubleTapSkipDuration]);
+  const handleDoubleTapRight = useCallback(() => handleSkip('forward', doubleTapSkipDuration), [handleSkip, doubleTapSkipDuration]);
 
   const handleMuteToggle = useCallback(async () => {
     if (!videoRef.current) return;
-    const newMuted = !isMuted;
-    setIsMuted(newMuted);
-
-    // Nếu đang mute → unmute thì restore volume về 0.25 nếu đang 0
-    if (isMuted && volume === 0) {
-      setVolume(0.25);
+    
+    const currentState = volumeStateRef.current;
+    const newMuted = !currentState.isMuted;
+    
+    if (currentState.isMuted && currentState.volume === 0) {
+      setVolumeState({ volume: 0.25, isMuted: false });
       await videoRef.current.setVolumeAsync(0.25);
+    } else {
+      setVolumeState(prev => ({ ...prev, isMuted: newMuted }));
     }
     await videoRef.current.setIsMutedAsync(newMuted);
-  }, [isMuted, volume]);
+  }, []);
 
   const handleLockToggle = useCallback(() => {
     setIsLocked(prev => !prev);
@@ -401,26 +518,20 @@ export default function PlayerScreen() {
     await videoRef.current.setRateAsync(speed, true);
   }, []);
 
-  const handleVolumeChange = useCallback(
-    async (vol: number) => {
-      if (!videoRef.current) return;
-      setVolume(vol);
-      await videoRef.current.setVolumeAsync(vol);
-      if (vol > 0 && isMuted) {
-        setIsMuted(false);
-        await videoRef.current.setIsMutedAsync(false);
-      }
-      if (vol === 0) {
-        setIsMuted(true);
-        await videoRef.current.setIsMutedAsync(true);
-      }
-    },
-    [isMuted]
-  );
+  const handleVolumeChange = useCallback(async (vol: number) => {
+    if (!videoRef.current) return;
+    
+    const newMuted = vol === 0;
+    setVolumeState({ volume: vol, isMuted: newMuted });
+    
+    await videoRef.current.setVolumeAsync(vol);
+    await videoRef.current.setIsMutedAsync(newMuted);
+  }, []);
 
   const handleGoBack = useCallback(async () => {
     try {
-      // Lưu lịch sử lần cuối trước khi thoát
+      setIsExiting(true);
+
       if (videoRef.current && data?.movie) {
         const status = await videoRef.current.getStatusAsync();
         if (status.isLoaded) {
@@ -442,9 +553,8 @@ export default function PlayerScreen() {
     }
   }, [router, data, addToHistory]);
 
-  const handleRelatedVideoPress = useCallback(async (video: any) => {
+  const handleRelatedVideoPress = useCallback(async (video: { slug: string }) => {
     try {
-      // Lưu lịch sử trước khi chuyển
       if (videoRef.current && data?.movie) {
         const status = await videoRef.current.getStatusAsync();
         if (status.isLoaded) {
@@ -455,64 +565,56 @@ export default function PlayerScreen() {
         await videoRef.current.pauseAsync();
       }
 
-      // Chuyển sang video mới
       router.replace(`/(home)/player/${video.slug}` as any);
     } catch (error) {
       console.log('Error switching video:', error);
     }
   }, [router, data, addToHistory]);
 
-  const handleDoubleTapLeft = useCallback(async () => {
-    if (!videoRef.current) return;
-    const status = await videoRef.current.getStatusAsync();
-    if (status.isLoaded) {
-      const newPos = Math.max(status.positionMillis - 10000, 0);
-
-      isSeeking.current = true;
-      setCurrentTime(newPos / 1000);
-
-      // Sử dụng safeMainSeek
-      safeMainSeek(newPos);
-
-      setTimeout(() => {
-        isSeeking.current = false;
-      }, 200);
-    }
-  }, [safeMainSeek]);
-
-  const handleDoubleTapRight = useCallback(async () => {
-    if (!videoRef.current) return;
-    const status = await videoRef.current.getStatusAsync();
-    if (status.isLoaded) {
-      const newPos = Math.min(
-        status.positionMillis + 10000,
-        status.durationMillis || status.positionMillis
-      );
-
-      isSeeking.current = true;
-      setCurrentTime(newPos / 1000);
-
-      // Sử dụng safeMainSeek
-      safeMainSeek(newPos);
-
-      setTimeout(() => {
-        isSeeking.current = false;
-      }, 200);
-    }
-  }, [safeMainSeek]);
-
-  // ===== Render =====
-  const videoUrl = data?.movie?.episodes?.[1]?.server_data?.[0]?.link;
-  const posterUrl =
-    data?.movie?.thumb_url || undefined;
-  const movieTitle = data?.movie?.name;
-
-  const isResumeVisible = showResumePrompt && isVideoReady;
-
+  // ===== Derived values =====
+  // Phân biệt API cũ vs mới:
+  // - API cũ: có 2 episodes, episode[1] là server hoạt động
+  // - API mới: có 1 episode, episode[0] với m3u8 trực tiếp
+  const hasMultipleEpisodes = (data?.movie?.episodes?.length ?? 0) > 1;
+  const videoUrl = hasMultipleEpisodes
+    ? data?.movie?.episodes?.[1]?.server_data?.[0]?.link  // API cũ: dùng episode[1]
+    : data?.movie?.episodes?.[0]?.server_data?.[0]?.link; // API mới: dùng episode[0]
   
+  const posterUrl = data?.movie?.thumb_url || undefined;
+  const movieTitle = data?.movie?.name;
+  const isResumeVisible = resumeState.showPrompt && resumeState.isVideoReady;
 
-  // ===== Loading Screen =====
-  if (isLoadingVideo) {
+  // ✅ Kiểm tra xem videoUrl có phải là m3u8 trực tiếp không
+  const isDirectM3u8 = videoUrl?.includes('.m3u8') || false;
+
+  // ✅ Log để debug
+  console.log('🎬 Player Debug:', {
+    hasData: !!data,
+    hasMovie: !!data?.movie,
+    movieId: data?.movie?.id,
+    movieSlug: data?.movie?.slug,
+    episodesCount: data?.movie?.episodes?.length,
+    hasMultipleEpisodes,
+    episode0ServerCount: data?.movie?.episodes?.[0]?.server_data?.length,
+    episode1ServerCount: data?.movie?.episodes?.[1]?.server_data?.length,
+    videoUrl,
+    isDirectM3u8,
+    isVideoUrlDirect: videoUrl?.startsWith('http'),
+  });
+
+  // ✅ Nếu là m3u8 trực tiếp, skip WebView extraction
+  if (isDirectM3u8 && loadingState.isLoadingVideo && !loadingState.m3u8Url) {
+    console.log('✅ Direct M3U8 detected, skipping WebView extraction');
+    setLoadingState({
+      m3u8Url: videoUrl || null,
+      videoError: null,
+      isLoadingVideo: false,
+      step: 'ready',
+    });
+  }
+
+  // ===== Render: Loading Screen =====
+  if (loadingState.isLoadingVideo) {
     return (
       <View style={styles.container}>
         <Stack.Screen
@@ -526,10 +628,9 @@ export default function PlayerScreen() {
         <VideoLoadingScreen
           posterUrl={posterUrl}
           title={movieTitle}
-          step={loadingStep}
+          step={loadingState.step}
         />
 
-        {/* Hidden WebView để extract M3U8 */}
         <View style={styles.hiddenWebViewContainer}>
           <WebView
             source={{ uri: videoUrl! }}
@@ -539,15 +640,14 @@ export default function PlayerScreen() {
             containerStyle={{ backgroundColor: 'black' }}
             mediaPlaybackRequiresUserAction={false}
             allowsInlineMediaPlayback={true}
-            onLoadStart={() => setLoadingStep('connecting')}
+            onLoadStart={() => setLoadingState(prev => ({ ...prev, step: 'connecting' }))}
             onLoadEnd={() => {
-              if (loadingStep === 'connecting') {
-                setLoadingStep('extracting');
+              if (loadingState.step === 'connecting') {
+                setLoadingState(prev => ({ ...prev, step: 'extracting' }));
               }
             }}
             injectedJavaScriptBeforeContentLoaded={`
               (function() {
-                // Thông báo step
                 window.ReactNativeWebView.postMessage(JSON.stringify({
                   type: 'step_update',
                   step: 'extracting'
@@ -603,8 +703,11 @@ export default function PlayerScreen() {
             `}
             onMessage={handleWebViewMessage}
             onError={() => {
-              setVideoError('Không thể tải video');
-              setIsLoadingVideo(false);
+              setLoadingState(prev => ({
+                ...prev,
+                videoError: 'Không thể tải video',
+                isLoadingVideo: false,
+              }));
             }}
           />
         </View>
@@ -612,18 +715,25 @@ export default function PlayerScreen() {
     );
   }
 
-  // ===== Error Screen =====
-  if (!m3u8Url || videoError) {
+  // ===== Render: Error Screen =====
+  if (!loadingState.m3u8Url || loadingState.videoError) {
     return (
       <View style={styles.loadingContainer}>
+        <Stack.Screen
+          options={{
+            headerShown: false,
+            gestureEnabled: false,
+            animation: 'fade',
+          }}
+        />
         <Text style={styles.errorText}>
-          {videoError || 'Không tìm thấy URL video'}
+          {loadingState.videoError || 'Không tìm thấy URL video'}
         </Text>
       </View>
     );
   }
 
-  // ===== Player Screen =====
+  // ===== Render: Player Screen =====
   return (
     <Animated.View style={[styles.container, { opacity: playerFadeAnim }]}>
       <Stack.Screen
@@ -636,40 +746,40 @@ export default function PlayerScreen() {
 
       <VideoGestureHandler
         onVolumeChange={handleVolumeChange}
-        volume={volume}
+        volume={volumeState.volume}
         isLocked={isLocked || isResumeVisible}
         isDrawerOpen={isDrawerOpen}
       >
         <Video
           ref={videoRef}
-          source={{ uri: m3u8Url }}
+          source={{ uri: loadingState.m3u8Url }}
           style={styles.video}
           resizeMode={ResizeMode.CONTAIN}
-          shouldPlay={!showResumePrompt}
-          isMuted={isMuted}
-          volume={volume}
+          shouldPlay={autoPlay && !resumeState.showPrompt}
+          isMuted={volumeState.isMuted}
+          volume={volumeState.volume}
           rate={playbackSpeed}
           onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
           onError={error => {
             console.log('❌ Video Error:', error);
-            setVideoError('Lỗi phát video');
+            setLoadingState(prev => ({ ...prev, videoError: 'Lỗi phát video' }));
           }}
           onLoad={handleVideoLoad}
-          
         />
 
-        {!isResumeVisible && (
+        {/* ✅ CHỈ 1 VideoControls với showDrawer={false} */}
+        {!isExiting && !isResumeVisible && (
           <VideoControls
-            isPlaying={isPlaying}
-            currentTime={currentTime}
-            duration={duration}
-            buffered={buffered}
-            isBuffering={isBuffering}
-            isMuted={isMuted}
+            isPlaying={playback.isPlaying}
+            currentTime={playback.currentTime}
+            duration={playback.duration}
+            buffered={playback.buffered}
+            isBuffering={playback.isBuffering}
+            isMuted={volumeState.isMuted}
             isLocked={isLocked}
             playbackSpeed={playbackSpeed}
             title={movieTitle}
-            videoUrl={m3u8Url}
+            videoUrl={loadingState.m3u8Url}
             posterUrl={posterUrl}
             onPlayPause={handlePlayPause}
             onSeek={handleSeek}
@@ -691,11 +801,12 @@ export default function PlayerScreen() {
             setShowRelatedMenu={setShowRelatedMenu}
           />
         )}
-        {/* ✅ Resume Overlay */}
-        {showResumePrompt && isVideoReady && (
+
+        {/* Resume Overlay */}
+        {!isExiting && isResumeVisible && (
           <ResumeOverlay
-            savedPosition={savedResumePosition}
-            duration={duration}
+            savedPosition={resumeState.savedPosition}
+            duration={playback.duration}
             onResume={handleResume}
             onStartOver={handleStartOver}
             countdownSeconds={8}
@@ -703,19 +814,19 @@ export default function PlayerScreen() {
         )}
       </VideoGestureHandler>
 
-      {/* Drawer nằm ngoài gesture handler */}
-      {!isResumeVisible && (
+      {/* ✅ CHỈ 1 VideoControls với showDrawer={true} - NẰM NGOÀI */}
+      {!isExiting && !isResumeVisible && (
         <VideoControls
-          isPlaying={isPlaying}
-          currentTime={currentTime}
-          duration={duration}
-          buffered={buffered}
-          isBuffering={isBuffering}
-          isMuted={isMuted}
+          isPlaying={playback.isPlaying}
+          currentTime={playback.currentTime}
+          duration={playback.duration}
+          buffered={playback.buffered}
+          isBuffering={playback.isBuffering}
+          isMuted={volumeState.isMuted}
           isLocked={isLocked}
           playbackSpeed={playbackSpeed}
           title={movieTitle}
-          videoUrl={m3u8Url}
+          videoUrl={loadingState.m3u8Url}
           posterUrl={posterUrl}
           onPlayPause={handlePlayPause}
           onSeek={handleSeek}

@@ -5,8 +5,8 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       vars:
-        XCODE_SCHEME: "truevid"
-        BUNDLE_ID: "com.hai0z.truevid"
+        XCODE_SCHEME: "avtube"
+        BUNDLE_ID: "com.hai0z.avtube"
       node: 20
     scripts:
       - name: Install npm dependencies
@@ -66,7 +66,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       vars:
-        PACKAGE_NAME: "com.hai0z.truevid"
+        PACKAGE_NAME: "com.hai0z.avtube"
       node: 20
     scripts:
       - name: Install npm dependencies

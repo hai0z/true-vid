@@ -16,7 +16,7 @@ interface VideoGestureHandlerProps {
   volume: number;
   children: React.ReactNode;
   isLocked: boolean;
-  isDrawerOpen?: boolean; // Thêm prop để biết drawer có đang mở không
+  isDrawerOpen?: boolean;
 }
 
 export function VideoGestureHandler({
@@ -33,21 +33,43 @@ export function VideoGestureHandler({
   const startValue = useRef(0);
   const gestureType = useRef<'brightness' | 'volume' | null>(null);
   const currentBrightness = useRef(0.5);
+  const hideTimeout = useRef<number | null>(null);
 
+  // ✅ Refs để PanResponder luôn access được giá trị mới nhất
+  const isLockedRef = useRef(isLocked);
+  const isDrawerOpenRef = useRef(isDrawerOpen);
   const currentVolumeRef = useRef(volume);
+  const onVolumeChangeRef = useRef(onVolumeChange);
+
+  useEffect(() => {
+    isLockedRef.current = isLocked;
+  }, [isLocked]);
+
+  useEffect(() => {
+    isDrawerOpenRef.current = isDrawerOpen;
+  }, [isDrawerOpen]);
 
   useEffect(() => {
     currentVolumeRef.current = volume;
   }, [volume]);
 
+  useEffect(() => {
+    onVolumeChangeRef.current = onVolumeChange;
+  }, [onVolumeChange]);
+
   const screenWidth = Dimensions.get('window').width;
   const screenHeight = Dimensions.get('window').height;
 
-  // ✅ Định nghĩa vùng 1/3
   const LEFT_ZONE = screenWidth / 3;
   const RIGHT_ZONE = (screenWidth * 2) / 3;
 
   const showIndicatorAnimation = useCallback(() => {
+    // ✅ Clear timeout cũ nếu có
+    if (hideTimeout.current) {
+      clearTimeout(hideTimeout.current);
+      hideTimeout.current = null;
+    }
+    
     Animated.timing(indicatorAnim, {
       toValue: 1,
       duration: 150,
@@ -56,30 +78,43 @@ export function VideoGestureHandler({
   }, [indicatorAnim]);
 
   const hideIndicatorAnimation = useCallback(() => {
-    Animated.timing(indicatorAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      setShowIndicator(null);
-    });
+    // ✅ Clear timeout cũ
+    if (hideTimeout.current) {
+      clearTimeout(hideTimeout.current);
+    }
+    
+    hideTimeout.current = setTimeout(() => {
+      Animated.timing(indicatorAnim, {
+        toValue: 0,
+        duration: 200,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowIndicator(null);
+        gestureType.current = null;
+      });
+    }, 100);
   }, [indicatorAnim]);
 
-  // ✅ Lưu vị trí X ban đầu để kiểm tra vùng
+  // ✅ Cleanup timeout khi unmount
+  useEffect(() => {
+    return () => {
+      if (hideTimeout.current) {
+        clearTimeout(hideTimeout.current);
+      }
+    };
+  }, []);
+
   const startX = useRef(0);
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (event, gestureState) => {
-        // ✅ Vô hiệu hóa nếu locked hoặc drawer đang mở
-        if (isLocked || isDrawerOpen) return false;
+        // ✅ Sử dụng ref thay vì closure
+        if (isLockedRef.current || isDrawerOpenRef.current) return false;
 
-        // ✅ Lấy vị trí X nơi người dùng chạm
         const { locationX } = event.nativeEvent;
 
-        // ✅ Chỉ kích hoạt ở 1/3 trái hoặc 1/3 phải
-        // Vùng 1/3 giữa → bỏ qua, không bắt gesture
         const isInLeftZone = locationX < LEFT_ZONE;
         const isInRightZone = locationX > RIGHT_ZONE;
 
@@ -91,11 +126,13 @@ export function VideoGestureHandler({
         );
       },
       onPanResponderGrant: async (event) => {
+        // ✅ Double check
+        if (isLockedRef.current || isDrawerOpenRef.current) return;
+
         const { locationX } = event.nativeEvent;
         startY.current = event.nativeEvent.locationY;
         startX.current = locationX;
 
-        // ✅ 1/3 bên trái → Brightness
         if (locationX < LEFT_ZONE) {
           gestureType.current = 'brightness';
           try {
@@ -105,14 +142,10 @@ export function VideoGestureHandler({
           } catch {
             startValue.current = 0.5;
           }
-        }
-        // ✅ 1/3 bên phải → Volume
-        else if (locationX > RIGHT_ZONE) {
+        } else if (locationX > RIGHT_ZONE) {
           gestureType.current = 'volume';
           startValue.current = currentVolumeRef.current;
-        }
-        // ✅ 1/3 giữa → Không làm gì (safety check)
-        else {
+        } else {
           gestureType.current = null;
           return;
         }
@@ -137,11 +170,14 @@ export function VideoGestureHandler({
             // Brightness API may not be available
           }
         } else {
-          onVolumeChange(newValue);
+          onVolumeChangeRef.current(newValue);
         }
       },
       onPanResponderRelease: () => {
-        gestureType.current = null;
+        hideIndicatorAnimation();
+      },
+      onPanResponderTerminate: () => {
+        // ✅ Xử lý khi gesture bị cancel
         hideIndicatorAnimation();
       },
     })
@@ -161,7 +197,16 @@ export function VideoGestureHandler({
       {children}
 
       {showIndicator && (
-        <Animated.View style={[styles.indicator, { opacity: indicatorAnim }]}>
+        <Animated.View 
+          style={[
+            styles.indicator, 
+            { opacity: indicatorAnim },
+            // ✅ Vị trí động: trái cho brightness, phải cho volume
+            showIndicator === 'brightness' 
+              ? styles.indicatorLeft 
+              : styles.indicatorRight
+          ]}
+        >
           <View style={styles.indicatorBox}>
             <Ionicons
               name={getIndicatorIcon() as any}
@@ -194,11 +239,17 @@ const styles = StyleSheet.create({
   },
   indicator: {
     position: 'absolute',
-    left: '50%',
     top: '50%',
-    marginLeft: -30,
     marginTop: -80,
     zIndex: 100,
+  },
+  // ✅ Indicator bên trái cho Brightness
+  indicatorLeft: {
+    left: 40,
+  },
+  // ✅ Indicator bên phải cho Volume  
+  indicatorRight: {
+    right: 40,
   },
   indicatorBox: {
     width: 60,
