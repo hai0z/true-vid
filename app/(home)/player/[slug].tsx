@@ -54,6 +54,10 @@ export default function PlayerScreen() {
   const lastSavedPosition = useRef(0);
   const isSeeking = useRef(false);
   const volumeSynced = useRef(false);
+  
+  // Serialization cho video chính để tránh crash
+  const isMainSeekingRef = useRef(false);
+  const nextMainSeekTimeRef = useRef<number | null>(null);
 
   // ===== Related Videos =====
   const relatedVideos = useMemo(() => {
@@ -271,6 +275,40 @@ export default function PlayerScreen() {
   );
 
   // ===== Control Handlers =====
+  
+  // Safe seek với serialization để tránh crash
+  const safeMainSeek = useCallback(async (timeMs: number) => {
+    if (!videoRef.current) return;
+
+    // Nếu đang seek, lưu vào queue
+    if (isMainSeekingRef.current) {
+      nextMainSeekTimeRef.current = timeMs;
+      return;
+    }
+
+    // Khóa
+    isMainSeekingRef.current = true;
+
+    try {
+      await videoRef.current.setPositionAsync(timeMs, {
+        toleranceMillisBefore: 100,
+        toleranceMillisAfter: 100,
+      });
+    } catch (error) {
+      console.log('Seek error ignored:', error);
+    } finally {
+      // Mở khóa
+      isMainSeekingRef.current = false;
+
+      // Kiểm tra queue
+      if (nextMainSeekTimeRef.current !== null) {
+        const nextTime = nextMainSeekTimeRef.current;
+        nextMainSeekTimeRef.current = null;
+        safeMainSeek(nextTime);
+      }
+    }
+  }, []);
+  
   const handlePlayPause = useCallback(async () => {
     if (!videoRef.current) return;
     const status = await videoRef.current.getStatusAsync();
@@ -292,26 +330,14 @@ export default function PlayerScreen() {
   }, []);
 
   const handleSeekComplete = useCallback(async (time: number) => {
-    if (!videoRef.current) return;
-
-    // 1. Cập nhật UI ngay lập tức để không giật
-    setCurrentTime(time);
-
-    try {
-      // 2. Seek video với tolerance = 0 để chính xác hơn
-      await videoRef.current.setPositionAsync(time * 1000, {
-        toleranceMillisBefore: 0,
-        toleranceMillisAfter: 0,
-      });
-    } finally {
-      // 3. ⚡ DELAY trước khi mở lại status update
-      //    Đợi vài frame để onPlaybackStatusUpdate
-      //    kịp báo đúng position mới
-      setTimeout(() => {
-        isSeeking.current = false;
-      }, 200);
-    }
-  }, []);
+    // Sử dụng safeMainSeek thay vì gọi trực tiếp
+    safeMainSeek(time * 1000);
+    
+    // Delay để mở lại status update
+    setTimeout(() => {
+      isSeeking.current = false;
+    }, 200);
+  }, [safeMainSeek]);
 
   const handleSkipForward = useCallback(async () => {
     if (!videoRef.current) return;
@@ -325,13 +351,14 @@ export default function PlayerScreen() {
       isSeeking.current = true;
       setCurrentTime(newPos / 1000);
 
-      await videoRef.current.setPositionAsync(newPos);
+      // Sử dụng safeMainSeek
+      safeMainSeek(newPos);
 
       setTimeout(() => {
         isSeeking.current = false;
       }, 200);
     }
-  }, []);
+  }, [safeMainSeek]);
 
   const handleSkipBackward = useCallback(async () => {
     if (!videoRef.current) return;
@@ -342,13 +369,14 @@ export default function PlayerScreen() {
       isSeeking.current = true;
       setCurrentTime(newPos / 1000);
 
-      await videoRef.current.setPositionAsync(newPos);
+      // Sử dụng safeMainSeek
+      safeMainSeek(newPos);
 
       setTimeout(() => {
         isSeeking.current = false;
       }, 200);
     }
-  }, []);
+  }, [safeMainSeek]);
 
   const handleMuteToggle = useCallback(async () => {
     if (!videoRef.current) return;
@@ -443,13 +471,14 @@ export default function PlayerScreen() {
       isSeeking.current = true;
       setCurrentTime(newPos / 1000);
 
-      await videoRef.current.setPositionAsync(newPos);
+      // Sử dụng safeMainSeek
+      safeMainSeek(newPos);
 
       setTimeout(() => {
         isSeeking.current = false;
       }, 200);
     }
-  }, []);
+  }, [safeMainSeek]);
 
   const handleDoubleTapRight = useCallback(async () => {
     if (!videoRef.current) return;
@@ -463,13 +492,14 @@ export default function PlayerScreen() {
       isSeeking.current = true;
       setCurrentTime(newPos / 1000);
 
-      await videoRef.current.setPositionAsync(newPos);
+      // Sử dụng safeMainSeek
+      safeMainSeek(newPos);
 
       setTimeout(() => {
         isSeeking.current = false;
       }, 200);
     }
-  }, []);
+  }, [safeMainSeek]);
 
   // ===== Render =====
   const videoUrl = data?.movie?.episodes?.[1]?.server_data?.[0]?.link;

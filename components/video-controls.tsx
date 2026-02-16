@@ -147,6 +147,10 @@ export function VideoControls({
   // Serialization mechanism để tránh seek conflict
   const isThumbnailSeekingRef = useRef(false);
   const nextThumbnailSeekPosRef = useRef<number | null>(null);
+  
+  // Debounce cho seek complete
+  const lastSeekCompleteTime = useRef<number>(0);
+  const lastSeekCallTime = useRef<number>(0);
 
   // Animations
   const fadeAnim = useRef(new Animated.Value(1)).current;
@@ -330,10 +334,23 @@ export function VideoControls({
   }, [safeDuration, processThumbnailSeek]);
 
   const handleSlidingComplete = useCallback((value: number) => {
-    onSeekComplete(clamp(value, 0, safeDuration));
+    const clamped = clamp(value, 0, safeDuration);
+    const now = Date.now();
+    
+    // Debounce nhẹ: không cho seek 2 lần trong 100ms vào cùng vị trí
+    if (now - lastSeekCallTime.current < 100 && Math.abs(clamped - lastSeekCompleteTime.current) < 0.5) {
+      isSeekingRef.current = false;
+      setIsSeeking(false);
+      return;
+    }
+    
+    lastSeekCompleteTime.current = clamped;
+    lastSeekCallTime.current = now;
     
     // Clear queue
     nextThumbnailSeekPosRef.current = null;
+    
+    onSeekComplete(clamped);
     
     setTimeout(() => {
       isSeekingRef.current = false;
