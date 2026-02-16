@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
   bottomMetaRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: -8 },
   timeContainer: { flexDirection: 'row', alignItems: 'center' },
   timeText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  lockIconBtn: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center' },
+  lockIconBtn: { flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginRight: 10, marginTop: 8 },
   lockLabel: { color: '#fff', fontSize: 9, marginTop: 2, fontWeight: '600', textTransform: 'uppercase' },
 
   // Locked
