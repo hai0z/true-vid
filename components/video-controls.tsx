@@ -7,15 +7,15 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Animated,
-  Dimensions,
-  GestureResponderEvent,
-  Pressable,
-  Image as RNImage,
-  StyleSheet,
-  Text,
-  View
+    ActivityIndicator,
+    Animated,
+    Dimensions,
+    GestureResponderEvent,
+    Pressable,
+    Image as RNImage,
+    StyleSheet,
+    Text,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
