@@ -5,7 +5,7 @@ workflows:
     instance_type: mac_mini_m2
     environment:
       vars:
-        XCODE_SCHEME: "avtube"
+        XCODE_SCHEME: "AvTube"
         BUNDLE_ID: "com.hai0z.avtube"
       node: 20
     scripts:
