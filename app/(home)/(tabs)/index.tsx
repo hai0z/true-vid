@@ -4,25 +4,26 @@ import { MovieSlider } from '@/components/movie-slider';
 import { useLatestMovies, useMovies, useMoviesByCategory } from '@/hooks/use-movies';
 import { useWatchHistoryStore } from '@/store/use-watch-history-store';
 import { Ionicons } from '@expo/vector-icons';
+import { FlashList, ListRenderItemInfo } from '@shopify/flash-list';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useMemo, useRef } from 'react';
+import React, { memo, useCallback, useMemo, useRef } from 'react';
 import {
   ActivityIndicator,
   Animated,
   Dimensions,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from 'react-native';
 
 const HISTORY_CARD_WIDTH = 160;
 const HISTORY_CARD_HEIGHT = 100;
+const MOVIE_CARD_WIDTH = 130;
+const SCREEN_HEIGHT = Dimensions.get('screen').height;
 
-// Config danh mục - dễ dàng thêm/bớt
 const CATEGORIES_CONFIG = [
   { name: 'Mới cập nhật', slug: 'moi-cap-nhat', icon: 'language-outline' },
   { name: 'Việt Sub', slug: 'vietsub', icon: 'language-outline' },
@@ -34,18 +35,150 @@ const CATEGORIES_CONFIG = [
   { name: 'Hentai', slug: 'hentai', icon: 'color-palette-outline' },
 ];
 
+// ━━━ Section type cho FlashList dọc ━━━
+type SectionItem =
+  | { type: 'slider'; id: string; movies: any[] }
+  | { type: 'recommended'; id: string; movies: any[] }
+  | { type: 'history'; id: string; items: any[] }
+  | { type: 'category'; id: string; movies: any[]; name: string; slug: string };
+
+// ━━━ Separators ━━━
+const MovieSeparator = memo(() => <View style={{ width: 2 }} />);
+const HistorySeparator = memo(() => <View style={{ width: 4 }} />);
+
+// ━━━ Horizontal Movie FlashList (memo) ━━━
+const HorizontalMovieList = memo(({
+  movies,
+  onPressMovie,
+}: {
+  movies: any[];
+  onPressMovie: (slug: string) => void;
+}) => {
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<any>) => (
+      <MovieCard
+        id={item.id}
+        title={item.name}
+        poster={item.thumb_url}
+        onPress={() => onPressMovie(item.slug)}
+      />
+    ),
+    [onPressMovie]
+  );
+
+  const keyExtractor = useCallback((item: any) => `movie-${item.id}`, []);
+
+  return (
+    <FlashList
+      horizontal
+      data={movies}
+      renderItem={renderItem}
+      keyExtractor={keyExtractor}
+      ItemSeparatorComponent={MovieSeparator}
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={{ paddingHorizontal: 16 }}
+      drawDistance={300}
+    />
+  );
+});
+
+// ━━━ Horizontal History FlashList (memo) ━━━
+const HorizontalHistoryList = memo(({
+  items,
+  onPressItem,
+}: {
+  items: any[];
+  onPressItem: (slug: string) => void;
+}) => {
+  const renderItem = useCallback(
+    ({ item }: ListRenderItemInfo<any>) => (
+      <HistoryCard
+        title={item.movie.name}
+        thumbnail={item.movie.thumb_url}
+        position={item.position}
+        duration={item.duration}
+        onPress={() => onPressItem(item.movie.slug)}
+      />
+    ),
+    [onPressItem]
+  );
+
+  const keyExtractor = useCallback(
+    (item: any) => `history-${item.movie.id}`,
+    []
+  );
+
+  return (
+    <FlashList
+      horizontal
+      data={items}
+      renderItem={renderItem}
+      keyExtractor={keyExtractor}
+      ItemSeparatorComponent={HistorySeparator}
+      showsHorizontalScrollIndicator={false}
+      snapToInterval={HISTORY_CARD_WIDTH + 12}
+      decelerationRate="fast"
+      contentContainerStyle={{ paddingHorizontal: 16 }}
+    />
+  );
+});
+
+// ━━━ Section Header (memo) ━━━
+const SectionHeader = memo(({
+  title,
+  icon,
+  iconColor,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  icon?: string;
+  iconColor?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) => (
+  <View style={styles.sectionHeader}>
+    <View style={styles.sectionTitleRow}>
+      <LinearGradient
+        colors={['#FF6B6B', '#EE5A24']}
+        style={styles.sectionIndicator}
+      />
+      {icon && (
+        <Ionicons
+          name={icon as any}
+          size={18}
+          color={iconColor || '#fff'}
+          style={styles.sectionIcon}
+        />
+      )}
+      <Text style={styles.sectionTitle}>{title}</Text>
+    </View>
+    {actionLabel && onAction && (
+      <Pressable
+        onPress={onAction}
+        style={({ pressed }) => [
+          styles.seeMoreButton,
+          pressed && styles.buttonPressed,
+        ]}
+      >
+        <Text style={styles.seeMoreText}>{actionLabel}</Text>
+        <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.5)" />
+      </Pressable>
+    )}
+  </View>
+));
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// MAIN SCREEN
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 export default function MoviesScreen() {
   const router = useRouter();
   const scrollY = useRef(new Animated.Value(0)).current;
   const { history } = useWatchHistoryStore();
-  
-  // Fetch slider (banner chính)
+
+  // ─── Data fetching ───
   const { data: allMovies, isLoading: isLoadingSlider } = useMovies(1);
-  
-  // Fetch latest movies from new API
-  const { data: latestMovies, isLoading: isLoadingLatest } = useLatestMovies(1);
-  
-  // Fetch tất cả danh mục (React tự động chạy song song)
+  const { data: latestMovies } = useLatestMovies(1);
   const { data: vietnamMovies } = useMoviesByCategory('viet-nam-clip', 1);
   const { data: vietsubMovies } = useMoviesByCategory('vietsub', 1);
   const { data: europeMovies } = useMoviesByCategory('chau-au', 1);
@@ -55,37 +188,111 @@ export default function MoviesScreen() {
   const { data: javHdMovies } = useMoviesByCategory('jav-hd', 1);
   const { data: hentaiMovies } = useMoviesByCategory('hentai', 1);
 
-  // Đề xuất JAV HD (lấy từ local data)
+  // ─── Local data ───
   const recommendedMovies = useMemo(() => {
     const moviesData = require('@/constants/movies.json');
-    const javHdMovies = moviesData.filter((movie: any) => 
+    const javHd = moviesData.filter((movie: any) =>
       movie.categories?.some((cat: any) => cat.slug === 'jav-hd')
     );
-    // Shuffle và lấy 10 phim ngẫu nhiên
-    return javHdMovies.sort(() => Math.random() - 0.5).slice(0, 15);
+    return javHd.sort(() => Math.random() - 0.5).slice(0, 15);
   }, []);
 
-  // Gom dữ liệu bằng useMemo để tránh tính toán lại mỗi lần scroll
-  const sections = useMemo(() => {
+  // ─── Category sections ───
+  const categorySections = useMemo(() => {
     const dataMap: Record<string, any> = {
       'viet-nam-clip': vietnamMovies,
-      'vietsub': vietsubMovies,
+      vietsub: vietsubMovies,
       'chau-au': europeMovies,
       'trung-quoc': chinaMovies,
       'han-quoc-18-': koreaMovies,
       'khong-che': uncensoredMovies,
       'jav-hd': javHdMovies,
-      'hentai': hentaiMovies,
-      'moi-cap-nhat': latestMovies
+      hentai: hentaiMovies,
+      'moi-cap-nhat': latestMovies,
     };
 
-    return CATEGORIES_CONFIG.map(cat => ({
+    return CATEGORIES_CONFIG.map((cat) => ({
       ...cat,
-      movies: dataMap[cat.slug]?.movies || []
-    })).filter(section => section.movies.length > 0);
-  }, [vietnamMovies, vietsubMovies, europeMovies, chinaMovies, koreaMovies, uncensoredMovies, javHdMovies, hentaiMovies, latestMovies]);
+      movies: dataMap[cat.slug]?.movies || [],
+    })).filter((s) => s.movies.length > 0);
+  }, [
+    vietnamMovies, vietsubMovies, europeMovies, chinaMovies,
+    koreaMovies, uncensoredMovies, javHdMovies, hentaiMovies, latestMovies,
+  ]);
 
- 
+  // ─── Build section data cho FlashList dọc ───
+  const sectionData = useMemo<SectionItem[]>(() => {
+    const data: SectionItem[] = [];
+
+    // Slider
+    data.push({
+      type: 'slider',
+      id: 'slider',
+      movies: recommendedMovies.slice(10, 15),
+    });
+
+    // Recommended
+    if (recommendedMovies.length > 0) {
+      data.push({
+        type: 'recommended',
+        id: 'recommended',
+        movies: recommendedMovies.slice(0, 9),
+      });
+    }
+
+    // Watch history
+    if (history.length > 0) {
+      data.push({
+        type: 'history',
+        id: 'history',
+        items: history.slice(0, 10),
+      });
+    }
+
+    // Categories
+    categorySections.forEach((section) => {
+      data.push({
+        type: 'category',
+        id: `cat-${section.slug}`,
+        movies: section.movies.slice(0, 10),
+        name: section.name,
+        slug: section.slug,
+      });
+    });
+
+    return data;
+  }, [recommendedMovies, history, categorySections]);
+
+  // ─── Stable navigation callbacks ───
+  const navigateToMovie = useCallback(
+    (slug: string) => router.push(`/(home)/movie/${slug}` as any),
+    [router]
+  );
+
+  const navigateToPlayer = useCallback(
+    (slug: string) => router.push(`/(home)/player/${slug}` as any),
+    [router]
+  );
+
+  const navigateToCategory = useCallback(
+    (slug: string) => router.push(`/(home)/category/${slug}` as any),
+    [router]
+  );
+
+  const navigateToHistory = useCallback(
+    () => router.push('/(home)/history' as any),
+    [router]
+  );
+
+  // ─── Scroll animation (useNativeDriver: false vì FlashList) ───
+  const handleScroll = useMemo(
+    () =>
+      Animated.event(
+        [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+        { useNativeDriver: false }
+      ),
+    [scrollY]
+  );
 
   const headerBgOpacity = scrollY.interpolate({
     inputRange: [0, 150],
@@ -93,16 +300,117 @@ export default function MoviesScreen() {
     extrapolate: 'clamp',
   });
 
+  // ─── FlashList: renderItem ───
+  const renderSectionItem = useCallback(
+    ({ item }: ListRenderItemInfo<SectionItem>) => {
+      switch (item.type) {
+        case 'slider':
+          return (
+            <View style={styles.sliderContainer}>
+              <MovieSlider
+                movies={item.movies}
+                onPressMovie={(movie) => navigateToMovie(movie.slug)}
+                onPressPlay={(movie) => navigateToPlayer(movie.slug)}
+              />
+              <LinearGradient
+                colors={['transparent', '#0A0A0A', '#0A0A0A']}
+                style={styles.sliderGradient}
+              />
+            </View>
+          );
 
+        case 'recommended':
+          return (
+            <View style={styles.sectionContainer}>
+              <SectionHeader
+                title="Đề xuất cho bạn"
+                icon="star"
+                iconColor="#FFD700"
+              />
+              <HorizontalMovieList
+                movies={item.movies}
+                onPressMovie={navigateToMovie}
+              />
+            </View>
+          );
 
-  
+        case 'history':
+          return (
+            <View style={styles.sectionContainer}>
+              <SectionHeader
+                title="Xem gần đây"
+                actionLabel="Xem tất cả"
+                onAction={navigateToHistory}
+              />
+              <HorizontalHistoryList
+                items={item.items}
+                onPressItem={navigateToPlayer}
+              />
+            </View>
+          );
 
+        case 'category':
+          return (
+            <View style={styles.sectionContainer}>
+              <SectionHeader
+                title={item.name}
+                actionLabel="Xem thêm"
+                onAction={() => navigateToCategory(item.slug)}
+              />
+              <HorizontalMovieList
+                movies={item.movies}
+                onPressMovie={navigateToMovie}
+              />
+            </View>
+          );
+
+        default:
+          return null;
+      }
+    },
+    [navigateToMovie, navigateToPlayer, navigateToCategory, navigateToHistory]
+  );
+
+  // ─── FlashList: getItemType (tối ưu recycling) ───
+  const getItemType = useCallback((item: SectionItem) => item.type, []);
+
+  // ─── FlashList: keyExtractor ───
+  const keyExtractor = useCallback((item: SectionItem) => item.id, []);
+
+  // ─── FlashList: overrideItemLayout (cải thiện ước tính kích thước) ───
+  const overrideItemLayout = useCallback(
+    (layout: { span?: number; size?: number }, item: SectionItem) => {
+      switch (item.type) {
+        case 'slider':
+          layout.size = 360;
+          break;
+        case 'history':
+          layout.size = 210;
+          break;
+        case 'recommended':
+        case 'category':
+          layout.size = 270;
+          break;
+      }
+    },
+    []
+  );
+
+  // ─── Footer spacer ───
+  const ListFooter = useCallback(
+    () => <View style={styles.bottomSpacer} />,
+    []
+  );
+
+  // ━━━ RENDER ━━━
   return (
     <View style={styles.container}>
-      {/* Animated Header */}
-      <Animated.View style={[styles.headerWrapper]}>
+      {/* ── Animated Header ── */}
+      <Animated.View style={styles.headerWrapper}>
         <BlurView intensity={90} tint="dark" style={styles.header}>
-          <Animated.View style={[styles.headerBg, { opacity: headerBgOpacity }]} />
+          <Animated.View
+            style={[styles.headerBg, { opacity: headerBgOpacity }]}
+          />
           <View style={styles.headerContent}>
             <View style={styles.headerLeft}>
               <View style={styles.logoContainer}>
@@ -114,15 +422,12 @@ export default function MoviesScreen() {
                 >
                   <Ionicons name="play" size={16} color="#fff" />
                 </LinearGradient>
-                <Text  style={styles.headerTitle}>
-                  AvTube
-                </Text>
+                <Text style={styles.headerTitle}>AvTube</Text>
               </View>
             </View>
-            
             <View style={styles.headerRight}>
-              <Pressable 
-                onPress={() => router.push('/(home)/history' as any)}
+              <Pressable
+                onPress={navigateToHistory}
                 style={styles.headerIconButton}
               >
                 <Ionicons name="time-outline" size={22} color="#fff" />
@@ -132,222 +437,46 @@ export default function MoviesScreen() {
         </BlurView>
       </Animated.View>
 
-      <Animated.ScrollView
-        style={styles.content}
-        showsVerticalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true }
-        )}
-        scrollEventThrottle={16}
-      >
-        {isLoadingSlider ? (
-          <View style={styles.loadingContainer}>
-            <View style={styles.loadingContent}>
-              <ActivityIndicator size="large" color="#FF6B6B" />
-              <Text style={styles.loadingTitle}>Đang tải phim</Text>
-              <Text style={styles.loadingSubtitle}>Vui lòng đợi trong giây lát...</Text>
-            </View>
+      {/* ── Main Content ── */}
+      {isLoadingSlider ? (
+        <View style={styles.loadingContainer}>
+          <View style={styles.loadingContent}>
+            <ActivityIndicator size="large" color="#FF6B6B" />
+            <Text style={styles.loadingTitle}>Đang tải phim</Text>
+            <Text style={styles.loadingSubtitle}>
+              Vui lòng đợi trong giây lát...
+            </Text>
           </View>
-        ) : (
-          <>
-            {/* Hero Slider */}
-            <View style={styles.sliderContainer}>
-              <MovieSlider
-                movies={recommendedMovies.slice(10,15)}
-                onPressMovie={(movie) =>
-                  router.push(`/(home)/movie/${movie.slug}` as any)
-                }
-                onPressPlay={(movie) =>
-                  router.push(`/(home)/player/${movie.slug}` as any)
-                }
-              />
-              <LinearGradient
-                colors={['transparent', '#0A0A0A', '#0A0A0A']}
-                style={styles.sliderGradient}
-              />
-            </View>
-
-            {/* Recommended Section - JAV HD */}
-            {recommendedMovies.length > 0 && (
-              <View style={styles.sectionContainer}>
-                <View style={styles.sectionHeader}>
-                  <View style={styles.sectionTitleRow}>
-                    <LinearGradient
-                      colors={['#FF6B6B', '#EE5A24']}
-                      style={styles.sectionIndicator}
-                    />
-                    <Ionicons name="star" size={18} color="#FFD700" style={styles.sectionIcon} />
-                    <Text style={styles.sectionTitle}>
-                      Đề xuất cho bạn
-                    </Text>
-                  </View>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.movieScrollContent}
-                  decelerationRate="fast"
-                >
-                  {recommendedMovies.slice(0,9).map((movie: any, index: number) => (
-                    <View
-                      key={movie.id}
-                      style={styles.movieCardWrapper}
-                    >
-                      <MovieCard
-                        id={movie.id}
-                        title={movie.name}
-                        poster={movie.thumb_url}
-                        onPress={() =>
-                          router.push(
-                            `/(home)/movie/${movie.slug}` as any
-                          )
-                        }
-                      />
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Watch History Section */}
-            {history.length > 0 && (
-              <View style={styles.sectionContainer}>
-                <View style={styles.sectionHeader}>
-                  <View style={styles.sectionTitleRow}>
-                    <LinearGradient
-                      colors={['#FF6B6B', '#EE5A24']}
-                      style={styles.sectionIndicator}
-                    />
-                    <Text  style={styles.sectionTitle}>
-                      Xem gần đây
-                    </Text>
-                  </View>
-                  <Pressable
-                    onPress={() => router.push('/(home)/history' as any)}
-                    style={({ pressed }) => [
-                      styles.clearHistoryButton,
-                      pressed && styles.buttonPressed,
-                    ]}
-                  >
-                    <Text style={styles.clearHistoryText}>
-                      Xem tất cả
-                    </Text>
-                    <Ionicons name="chevron-forward" size={14} color="rgba(255,255,255,0.5)" />
-                  </Pressable>
-                </View>
-
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.historyScrollContent}
-                  decelerationRate="fast"
-                  snapToInterval={HISTORY_CARD_WIDTH + 12}
-                >
-                  {history.slice(0, 10).map((item, index) => (
-                    <View
-                      key={item.movie.id}
-                     
-                    >
-                      <HistoryCard
-                        title={item.movie.name}
-                        thumbnail={item.movie.thumb_url}
-                        position={item.position}
-                        duration={item.duration}
-                        onPress={() => router.push(`/(home)/player/${item.movie.slug}` as any)}
-                      />
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            {/* Category Sections */}
-            {sections.map(
-              (category, index) => (
-                  <View key={`${category.slug}-${index}`} style={styles.sectionContainer}>
-                    <View style={styles.sectionHeader}>
-                      <View style={styles.sectionTitleRow}>
-                        <LinearGradient
-                          colors={['#FF6B6B', '#EE5A24']}
-                          style={styles.sectionIndicator}
-                        />
-                        <Text  style={styles.sectionTitle}>
-                          {category.name}
-                        </Text>
-                      </View>
-                      <Pressable
-                        onPress={() =>
-                          router.push(
-                            `/(home)/category/${category.slug}` as any
-                          )
-                        }
-                        style={({ pressed }) => [
-                          styles.seeMoreButton,
-                          pressed && styles.buttonPressed,
-                        ]}
-                      >
-                        <Text style={styles.seeMoreText}>
-                          Xem thêm
-                        </Text>
-                        <Ionicons
-                          name="chevron-forward"
-                          size={14}
-                          color="rgba(255,255,255,0.5)"
-                        />
-                      </Pressable>
-                    </View>
-
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.movieScrollContent}
-                      decelerationRate="fast"
-                    >
-                      {category.movies.slice(0, 10).map((movie:any, movieIndex:number) => (
-                        <View
-                          key={movie.id}
-                          style={[
-                            styles.movieCardWrapper,
-                           
-                          ]}
-                        >
-                          <MovieCard
-                            id={movie.id}
-                            title={movie.name}
-                            poster={movie.thumb_url}
-                            onPress={() =>
-                              router.push(
-                                `/(home)/movie/${movie.slug}` as any
-                              )
-                            }
-                          />
-                        </View>
-                      ))}
-
-                    
-                    </ScrollView>
-                  </View>
-                )
-            )}
-
-            {/* Bottom Spacer */}
-            <View style={styles.bottomSpacer} />
-          </>
-        )}
-      </Animated.ScrollView>
+        </View>
+      ) : (
+        <FlashList
+          data={sectionData}
+          renderItem={renderSectionItem}
+          getItemType={getItemType}
+          keyExtractor={keyExtractor}
+          overrideItemLayout={overrideItemLayout}
+          showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
+          drawDistance={500}
+          ListFooterComponent={ListFooter}
+          contentContainerStyle={{ backgroundColor: '#0A0A0A' }}
+        />
+      )}
     </View>
   );
 }
 
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// STYLES
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0A0A0A',
   },
 
-  // ─── Header ───────────────────────────
+  // ─── Header ───
   headerWrapper: {
     position: 'absolute',
     top: 0,
@@ -406,17 +535,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // ─── Content ──────────────────────────
-  content: {
-    flex: 1,
-  },
-
-  // ─── Loading ──────────────────────────
+  // ─── Loading ───
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    minHeight: Dimensions.get('screen').height
+    minHeight: SCREEN_HEIGHT,
   },
   loadingContent: {
     alignItems: 'center',
@@ -435,11 +559,11 @@ const styles = StyleSheet.create({
     fontWeight: '400',
   },
 
-  // ─── Slider ───────────────────────────
+  // ─── Slider ───
   sliderContainer: {
     position: 'relative',
     marginBottom: 8,
-    paddingTop:48
+    paddingTop: 48,
   },
   sliderGradient: {
     position: 'absolute',
@@ -449,9 +573,9 @@ const styles = StyleSheet.create({
     height: 80,
   },
 
-  // ─── Sections ─────────────────────────
+  // ─── Sections ───
   sectionContainer: {
-    marginBottom: 28,
+    paddingBottom: 28,
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -481,7 +605,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.3,
   },
 
-  // ─── See More Button ──────────────────
+  // ─── Buttons ───
   seeMoreButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -501,131 +625,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.96 }],
   },
 
-  // ─── History Section ──────────────────
-  clearHistoryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    gap: 4,
-  },
-  clearHistoryText: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
-    fontWeight: '500',
-  },
-  historyScrollContent: {
-    paddingRight: 16,
-    gap: 4,
-  },
-  historyCard: {
-    width: HISTORY_CARD_WIDTH,
-    overflow: 'hidden',
-  },
-  historyCardPressed: {
-    opacity: 0.7,
-    transform: [{ scale: 0.97 }],
-  },
-  historyThumbnailContainer: {
-    width: HISTORY_CARD_WIDTH,
-    height: HISTORY_CARD_HEIGHT,
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  historyThumbnail: {
-    width: '100%',
-    height: '100%',
-  },
-  historyThumbnailOverlay: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  historyPlayOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  historyPlayButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,107,107,0.85)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingLeft: 2,
-  },
-  timeRemainingBadge: {
-    position: 'absolute',
-    bottom: 8,
-    right: 6,
-    backgroundColor: 'rgba(0,0,0,0.75)',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  timeRemainingText: {
-    fontSize: 10,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
-  },
-  historyProgressContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  historyProgressBar: {
-    height: '100%',
-    borderRadius: 1.5,
-  },
-  historyTitle: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
-    marginTop: 8,
-    lineHeight: 16,
-  },
-
-  // ─── Movie Cards ──────────────────────
-  movieScrollContent: {
-    paddingRight: 16,
-  },
-  movieCardWrapper: {
-    marginRight: 2,
-  },
-
-  // ─── See More Card ────────────────────
-  seeMoreCard: {
-    width: 120,
-    marginRight: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
-    alignSelf: 'center',
-  },
-  seeMoreCardPressed: {
-    opacity: 0.6,
-  },
-  seeMoreCardGradient: {
-    width: '100%',
-    height: 140,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,107,107,0.3)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  seeMoreCardText: {
-    fontSize: 13,
-    color: '#FF6B6B',
-    fontWeight: '600',
-  },
-
-  // ─── Bottom ───────────────────────────
+  // ─── Bottom ───
   bottomSpacer: {
     height: 100,
   },

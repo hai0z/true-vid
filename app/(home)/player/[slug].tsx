@@ -600,6 +600,8 @@ export default function PlayerScreen() {
     videoUrl,
     isDirectM3u8,
     isVideoUrlDirect: videoUrl?.startsWith('http'),
+    m3u8Url: loadingState.m3u8Url,
+    isLoadingVideo: loadingState.isLoadingVideo,
   });
 
   // ✅ Nếu là m3u8 trực tiếp, skip WebView extraction

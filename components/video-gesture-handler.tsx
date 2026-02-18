@@ -1,17 +1,40 @@
 // components/video-gesture-handler.tsx
 import { Ionicons } from '@expo/vector-icons';
 import * as Brightness from 'expo-brightness';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  LayoutChangeEvent,
   PanResponder,
   StyleSheet,
   Text,
-  View
+  View,
 } from 'react-native';
 
-interface VideoGestureHandlerProps {
+// ━━━ Constants ━━━
+const NETFLIX_RED = '#E50914';
+const GESTURE_THRESHOLD_Y = 12;
+const DIRECTION_RATIO = 1.5;
+const SENSITIVITY = 0.55;
+const HIDE_DELAY = 400;
+const FADE_IN = 150;
+const FADE_OUT = 250;
+const SAFETY_TIMEOUT = 4000; // ✅ Auto-hide nếu mọi thứ fail
+
+// ━━━ Helpers ━━━
+function clamp(v: number, min: number, max: number) {
+  return Math.min(Math.max(v, min), max);
+}
+
+function getIcon(type: 'brightness' | 'volume' | null, value: number): string {
+  if (type === 'brightness') return value > 0.5 ? 'sunny' : 'sunny-outline';
+  if (value === 0) return 'volume-mute';
+  return value < 0.5 ? 'volume-low' : 'volume-high';
+}
+
+// ━━━ Types ━━━
+interface Props {
   onVolumeChange: (volume: number) => void;
   volume: number;
   children: React.ReactNode;
@@ -19,213 +42,291 @@ interface VideoGestureHandlerProps {
   isDrawerOpen?: boolean;
 }
 
-export function VideoGestureHandler({
+function VideoGestureHandlerBase({
   onVolumeChange,
   volume,
   children,
   isLocked,
   isDrawerOpen = false,
-}: VideoGestureHandlerProps) {
-  const [showIndicator, setShowIndicator] = useState<'brightness' | 'volume' | null>(null);
-  const [indicatorValue, setIndicatorValue] = useState(0);
-  const indicatorAnim = useRef(new Animated.Value(0)).current;
-  const startY = useRef(0);
-  const startValue = useRef(0);
-  const gestureType = useRef<'brightness' | 'volume' | null>(null);
-  const currentBrightness = useRef(0.5);
-  const hideTimeout = useRef<number | null>(null);
+}: Props) {
+  // ── Visual state ──
+  const [activeType, setActiveType] = useState<'brightness' | 'volume' | null>(null);
+  const [displayPercent, setDisplayPercent] = useState(0);
 
-  // ✅ Refs để PanResponder luôn access được giá trị mới nhất
-  const isLockedRef = useRef(isLocked);
-  const isDrawerOpenRef = useRef(isDrawerOpen);
-  const currentVolumeRef = useRef(volume);
-  const onVolumeChangeRef = useRef(onVolumeChange);
+  // ── Animated ──
+  const opacity = useRef(new Animated.Value(0)).current;
+  const fillAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    isLockedRef.current = isLocked;
-  }, [isLocked]);
+  // ── Timers ──
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const safetyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const rafRef = useRef<number | undefined>(undefined);
 
-  useEffect(() => {
-    isDrawerOpenRef.current = isDrawerOpen;
-  }, [isDrawerOpen]);
+  // ── Gesture state (refs, không re-render) ──
+  const gestureTypeRef = useRef<'brightness' | 'volume' | null>(null);
+  const isGestureActiveRef = useRef(false); // ✅ Track gesture lifecycle
+  const startValueRef = useRef(0);
+  const brightnessRef = useRef(0.5);
+  const pendingValueRef = useRef(0);
+  const needsTextUpdate = useRef(false);
+  const barHeightRef = useRef(80);
 
-  useEffect(() => {
-    currentVolumeRef.current = volume;
-  }, [volume]);
+  // ── Props sync refs ──
+  const lockedRef = useRef(isLocked);
+  const drawerRef = useRef(isDrawerOpen);
+  const volumeRef = useRef(volume);
+  const volumeCbRef = useRef(onVolumeChange);
 
-  useEffect(() => {
-    onVolumeChangeRef.current = onVolumeChange;
-  }, [onVolumeChange]);
+  useEffect(() => { lockedRef.current = isLocked; }, [isLocked]);
+  useEffect(() => { drawerRef.current = isDrawerOpen; }, [isDrawerOpen]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
+  useEffect(() => { volumeCbRef.current = onVolumeChange; }, [onVolumeChange]);
 
-  const screenWidth = Dimensions.get('window').width;
-  const screenHeight = Dimensions.get('window').height;
-
-  const LEFT_ZONE = screenWidth / 3;
-  const RIGHT_ZONE = (screenWidth * 2) / 3;
-
-  const showIndicatorAnimation = useCallback(() => {
-    // ✅ Clear timeout cũ nếu có
-    if (hideTimeout.current) {
-      clearTimeout(hideTimeout.current);
-      hideTimeout.current = null;
+  // ── Cleanup ALL timers ──
+  const clearAllTimers = useCallback(() => {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = undefined;
     }
-    
-    Animated.timing(indicatorAnim, {
-      toValue: 1,
-      duration: 150,
-      useNativeDriver: true,
-    }).start();
-  }, [indicatorAnim]);
-
-  const hideIndicatorAnimation = useCallback(() => {
-    // ✅ Clear timeout cũ
-    if (hideTimeout.current) {
-      clearTimeout(hideTimeout.current);
+    if (safetyTimerRef.current) {
+      clearTimeout(safetyTimerRef.current);
+      safetyTimerRef.current = undefined;
     }
-    
-    hideTimeout.current = setTimeout(() => {
-      Animated.timing(indicatorAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => {
-        setShowIndicator(null);
-        gestureType.current = null;
-      });
-    }, 100);
-  }, [indicatorAnim]);
-
-  // ✅ Cleanup timeout khi unmount
-  useEffect(() => {
-    return () => {
-      if (hideTimeout.current) {
-        clearTimeout(hideTimeout.current);
-      }
-    };
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = undefined;
+    }
   }, []);
 
-  const startX = useRef(0);
+  useEffect(() => () => clearAllTimers(), [clearAllTimers]);
 
+  // ━━━ CORE: Show indicator ━━━
+  const showIndicator = useCallback((type: 'brightness' | 'volume', initialValue: number) => {
+    // Clear mọi pending hide
+    clearAllTimers();
+
+    // Set state
+    gestureTypeRef.current = type;
+    isGestureActiveRef.current = true;
+
+    // Update fill & text ngay
+    fillAnim.setValue(initialValue);
+    setDisplayPercent(Math.round(initialValue * 100));
+    setActiveType(type);
+
+    // ✅ Stop animation cũ trước khi start mới → tránh conflict
+    opacity.stopAnimation(() => {
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: FADE_IN,
+        useNativeDriver: true,
+      }).start();
+    });
+
+    // ✅ Safety auto-hide: dù gì cũng ẩn sau N giây
+    safetyTimerRef.current = setTimeout(() => {
+      console.warn('[GestureHandler] Safety timeout - force hiding indicator');
+      forceHide();
+    }, SAFETY_TIMEOUT);
+  }, [opacity, fillAnim, clearAllTimers]);
+
+  // ━━━ CORE: Schedule hide (với delay) ━━━
+  const scheduleHide = useCallback(() => {
+    isGestureActiveRef.current = false;
+
+    // Clear hide timer cũ nếu có
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+
+    hideTimerRef.current = setTimeout(() => {
+      // ✅ Double-check: nếu gesture mới đã bắt đầu → không ẩn
+      if (isGestureActiveRef.current) return;
+
+      opacity.stopAnimation(() => {
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: FADE_OUT,
+          useNativeDriver: true,
+        }).start(({ finished }) => {
+          // ✅ Luôn reset, kể cả khi bị interrupt
+          // Chỉ giữ nếu gesture mới đang active
+          if (!isGestureActiveRef.current) {
+            setActiveType(null);
+            gestureTypeRef.current = null;
+          }
+        });
+      });
+    }, HIDE_DELAY);
+  }, [opacity]);
+
+  // ━━━ CORE: Force hide (không delay, cho safety/terminate) ━━━
+  const forceHide = useCallback(() => {
+    isGestureActiveRef.current = false;
+    clearAllTimers();
+
+    opacity.stopAnimation(() => {
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
+        setActiveType(null);
+        gestureTypeRef.current = null;
+      });
+    });
+  }, [opacity, clearAllTimers]);
+
+  // ── Refs for PanResponder access ──
+  const showIndicatorRef = useRef(showIndicator);
+  const scheduleHideRef = useRef(scheduleHide);
+  const forceHideRef = useRef(forceHide);
+
+  useEffect(() => { showIndicatorRef.current = showIndicator; }, [showIndicator]);
+  useEffect(() => { scheduleHideRef.current = scheduleHide; }, [scheduleHide]);
+  useEffect(() => { forceHideRef.current = forceHide; }, [forceHide]);
+
+  // ── RAF text updater ──
+  const scheduleTextUpdate = useCallback(() => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = undefined;
+      if (needsTextUpdate.current) {
+        needsTextUpdate.current = false;
+        setDisplayPercent(Math.round(pendingValueRef.current * 100));
+      }
+    });
+  }, []);
+  const scheduleTextRef = useRef(scheduleTextUpdate);
+  useEffect(() => { scheduleTextRef.current = scheduleTextUpdate; }, [scheduleTextUpdate]);
+
+  // ━━━ PanResponder (tạo 1 lần, dùng refs) ━━━
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (event, gestureState) => {
-        // ✅ Sử dụng ref thay vì closure
-        if (isLockedRef.current || isDrawerOpenRef.current) return false;
 
-        const { locationX } = event.nativeEvent;
+      onMoveShouldSetPanResponder: (e, gs) => {
+        if (lockedRef.current || drawerRef.current) return false;
 
-        const isInLeftZone = locationX < LEFT_ZONE;
-        const isInRightZone = locationX > RIGHT_ZONE;
-
-        if (!isInLeftZone && !isInRightZone) return false;
+        const w = Dimensions.get('window').width;
+        const x = e.nativeEvent.locationX;
+        const inZone = x < w / 3 || x > (w * 2) / 3;
+        if (!inZone) return false;
 
         return (
-          Math.abs(gestureState.dy) > 15 &&
-          Math.abs(gestureState.dy) > Math.abs(gestureState.dx)
+          Math.abs(gs.dy) > GESTURE_THRESHOLD_Y &&
+          Math.abs(gs.dy) > Math.abs(gs.dx) * DIRECTION_RATIO
         );
       },
-      onPanResponderGrant: async (event) => {
-        // ✅ Double check
-        if (isLockedRef.current || isDrawerOpenRef.current) return;
 
-        const { locationX } = event.nativeEvent;
-        startY.current = event.nativeEvent.locationY;
-        startX.current = locationX;
+      // ✅ KHÔNG ASYNC - đây là fix chính
+      onPanResponderGrant: (e) => {
+        if (lockedRef.current || drawerRef.current) return;
 
-        if (locationX < LEFT_ZONE) {
-          gestureType.current = 'brightness';
-          try {
-            const current = await Brightness.getBrightnessAsync();
-            currentBrightness.current = current;
-            startValue.current = current;
-          } catch {
-            startValue.current = 0.5;
-          }
-        } else if (locationX > RIGHT_ZONE) {
-          gestureType.current = 'volume';
-          startValue.current = currentVolumeRef.current;
-        } else {
-          gestureType.current = null;
-          return;
-        }
+        const w = Dimensions.get('window').width;
+        const x = e.nativeEvent.locationX;
 
-        setShowIndicator(gestureType.current);
-        setIndicatorValue(startValue.current);
-        showIndicatorAnimation();
-      },
-      onPanResponderMove: async (_, gestureState) => {
-        if (!gestureType.current) return;
+        if (x < w / 3) {
+          // ── Brightness ──
+          // Dùng cached value trước, async update sau
+          startValueRef.current = brightnessRef.current;
 
-        const deltaRatio = -gestureState.dy / (screenHeight * 0.6);
-        const newValue = Math.max(0, Math.min(1, startValue.current + deltaRatio));
+          // Fire-and-forget: update startValue khi có giá trị thật
+          Brightness.getBrightnessAsync()
+            .then((b) => {
+              brightnessRef.current = b;
+              // Chỉ update nếu gesture vẫn đang active VÀ chưa di chuyển nhiều
+              if (isGestureActiveRef.current && gestureTypeRef.current === 'brightness') {
+                startValueRef.current = b;
+              }
+            })
+            .catch(() => {});
 
-        setIndicatorValue(newValue);
-
-        if (gestureType.current === 'brightness') {
-          try {
-            await Brightness.setBrightnessAsync(newValue);
-            currentBrightness.current = newValue;
-          } catch (e) {
-            // Brightness API may not be available
-          }
-        } else {
-          onVolumeChangeRef.current(newValue);
+          showIndicatorRef.current('brightness', startValueRef.current);
+        } else if (x > (w * 2) / 3) {
+          // ── Volume ──
+          startValueRef.current = volumeRef.current;
+          showIndicatorRef.current('volume', startValueRef.current);
         }
       },
+
+      onPanResponderMove: (_, gs) => {
+        const type = gestureTypeRef.current;
+        if (!type) return;
+
+        const h = Dimensions.get('window').height;
+        const delta = -gs.dy / (h * SENSITIVITY);
+        const val = clamp(startValueRef.current + delta, 0, 1);
+
+        // Animated fill (không re-render)
+        fillAnim.setValue(val);
+
+        // Batch text update
+        pendingValueRef.current = val;
+        needsTextUpdate.current = true;
+        scheduleTextRef.current?.();
+
+        // Apply
+        if (type === 'brightness') {
+          Brightness.setBrightnessAsync(val).catch(() => {});
+          brightnessRef.current = val;
+        } else {
+          volumeCbRef.current(val);
+        }
+      },
+
       onPanResponderRelease: () => {
-        hideIndicatorAnimation();
+        scheduleHideRef.current();
       },
+
       onPanResponderTerminate: () => {
-        // ✅ Xử lý khi gesture bị cancel
-        hideIndicatorAnimation();
+        // ✅ Gesture bị hệ thống cướp → force hide ngay
+        forceHideRef.current();
       },
     })
   ).current;
 
-  const getIndicatorIcon = (): string => {
-    if (showIndicator === 'brightness') {
-      return indicatorValue > 0.5 ? 'sunny' : 'sunny-outline';
-    }
-    if (indicatorValue === 0) return 'volume-mute';
-    if (indicatorValue < 0.5) return 'volume-low';
-    return 'volume-high';
-  };
+  // ── Layout ──
+  const handleBarLayout = useCallback((e: LayoutChangeEvent) => {
+    barHeightRef.current = e.nativeEvent.layout.height;
+  }, []);
 
+  // ── Derived render values ──
+  const animatedFillHeight = useMemo(
+    () => fillAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, barHeightRef.current],
+      extrapolate: 'clamp',
+    }),
+    []
+  );
+
+  const icon = useMemo(
+    () => getIcon(activeType, displayPercent / 100),
+    [activeType, displayPercent]
+  );
+
+  const percentText = `${displayPercent}%`;
+  const posStyle = activeType === 'brightness' ? styles.indicatorLeft : styles.indicatorRight;
+
+  // ━━━ RENDER ━━━
   return (
     <View style={styles.container} {...panResponder.panHandlers}>
       {children}
 
-      {showIndicator && (
-        <Animated.View 
-          style={[
-            styles.indicator, 
-            { opacity: indicatorAnim },
-            // ✅ Vị trí động: trái cho brightness, phải cho volume
-            showIndicator === 'brightness' 
-              ? styles.indicatorLeft 
-              : styles.indicatorRight
-          ]}
+      {activeType != null && (
+        <Animated.View
+          style={[styles.indicator, posStyle, { opacity }]}
+          pointerEvents="none"
         >
-          <View style={styles.indicatorBox}>
-            <Ionicons
-              name={getIndicatorIcon() as any}
-              size={24}
-              color="#fff"
-            />
-            <View style={styles.indicatorBarContainer}>
-              <View style={styles.indicatorBarBg}>
-                <View
-                  style={[
-                    styles.indicatorBarFill,
-                    { height: `${indicatorValue * 100}%` },
-                  ]}
-                />
+          <View style={styles.box}>
+            <Ionicons name={icon as any} size={24} color="#fff" />
+
+            <View style={styles.barWrap}>
+              <View style={styles.barBg} onLayout={handleBarLayout}>
+                <Animated.View style={[styles.barFill, { height: animatedFillHeight }]} />
               </View>
             </View>
-            <Text style={styles.indicatorText}>
-              {Math.round(indicatorValue * 100)}%
-            </Text>
+
+            <Text style={styles.text}>{percentText}</Text>
           </View>
         </Animated.View>
       )}
@@ -233,25 +334,22 @@ export function VideoGestureHandler({
   );
 }
 
+export const VideoGestureHandler = memo(VideoGestureHandlerBase);
+
+// ━━━ STYLES ━━━
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
+  container: { flex: 1 },
+
   indicator: {
     position: 'absolute',
     top: '50%',
     marginTop: -80,
     zIndex: 100,
   },
-  // ✅ Indicator bên trái cho Brightness
-  indicatorLeft: {
-    left: 40,
-  },
-  // ✅ Indicator bên phải cho Volume  
-  indicatorRight: {
-    right: 40,
-  },
-  indicatorBox: {
+  indicatorLeft: { left: 40 },
+  indicatorRight: { right: 40 },
+
+  box: {
     width: 60,
     height: 160,
     backgroundColor: 'rgba(0,0,0,0.75)',
@@ -261,12 +359,9 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 8,
   },
-  indicatorBarContainer: {
-    flex: 1,
-    width: 6,
-    justifyContent: 'flex-end',
-  },
-  indicatorBarBg: {
+
+  barWrap: { flex: 1, width: 6, justifyContent: 'flex-end' },
+  barBg: {
     flex: 1,
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.3)',
@@ -274,14 +369,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'flex-end',
   },
-  indicatorBarFill: {
+  barFill: {
     width: '100%',
-    backgroundColor: '#E50914',
+    backgroundColor: NETFLIX_RED,
     borderRadius: 3,
   },
-  indicatorText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
-  },
+
+  text: { color: '#fff', fontSize: 11, fontWeight: '600' },
 });
