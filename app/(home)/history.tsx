@@ -196,6 +196,9 @@ export default function HistoryScreen() {
           <Animated.View style={[styles.headerBg, { opacity: headerBgOpacity }]} />
           <View style={styles.headerContent}>
             <View style={styles.headerLeft}>
+              <Pressable onPress={() => router.back()} style={styles.backButton}>
+                <Ionicons name="chevron-back" size={20} color="#fff" />
+              </Pressable>
               <View style={styles.logoContainer}>
                 <LinearGradient
                   colors={['#FF6B6B', '#EE5A24']}
@@ -285,6 +288,14 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  backButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
   },
   logoContainer: {
     flexDirection: 'row',

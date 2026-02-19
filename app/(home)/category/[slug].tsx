@@ -23,12 +23,12 @@ export default function CategoryScreen() {
   const router = useRouter();
   const [page, setPage] = useState(1);
   const [allMovies, setAllMovies] = useState<Movie[]>([]);
-
+  
   // Nếu slug là 'moi-cap-nhat' thì dùng useLatestMovies (API mới), còn lại dùng useMoviesByCategory
   const isNewUpdates = slug === 'moi-cap-nhat';
   
-  const latestQuery = useLatestMovies(page);
-  const categoryQuery = useMoviesByCategory(slug, page);
+  const latestQuery = useLatestMovies(page, isNewUpdates);
+  const categoryQuery = useMoviesByCategory(slug, page, !isNewUpdates);
 
   const data = isNewUpdates ? latestQuery.data : categoryQuery.data;
   const isLoading = isNewUpdates ? latestQuery.isLoading : categoryQuery.isLoading;

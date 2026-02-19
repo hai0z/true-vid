@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
   sliderContainer: {
     position: 'relative',
     marginBottom: 8,
-    paddingTop: 48,
+    paddingTop: 120,
   },
   sliderGradient: {
     position: 'absolute',

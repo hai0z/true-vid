@@ -6,8 +6,9 @@ import { Dimensions, Pressable, ScrollView, StyleSheet, Text, View } from 'react
 import { IconSymbol } from './ui/icon-symbol';
 
 const { width } = Dimensions.get('window');
-const SLIDER_WIDTH = width;
-const SLIDER_HEIGHT = width * 1.2; // Tăng chiều cao lên nhiều hơn
+const SLIDER_GAP = 14;
+const SLIDER_WIDTH = Math.round(width * 0.86);
+const SLIDER_HEIGHT = Math.round(SLIDER_WIDTH * 1.08);
 
 interface MovieSliderProps {
   movies: Movie[];
@@ -64,7 +65,7 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
         const nextIndex = (activeIndex + 1) % Math.min(movies.length, 5);
         setActiveIndex(nextIndex);
         scrollViewRef.current?.scrollTo({
-          x: nextIndex * SLIDER_WIDTH,
+          x: nextIndex * (SLIDER_WIDTH + SLIDER_GAP),
           animated: true,
         });
       }
@@ -75,7 +76,7 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
 
   const handleScroll = (event: any) => {
     const scrollPosition = event.nativeEvent.contentOffset.x;
-    const index = Math.round(scrollPosition / SLIDER_WIDTH);
+    const index = Math.round(scrollPosition / (SLIDER_WIDTH + SLIDER_GAP));
     if (index !== activeIndex) {
       setActiveIndex(index);
     }
@@ -88,11 +89,14 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
       <ScrollView
         ref={scrollViewRef}
         horizontal
-        pagingEnabled
         showsHorizontalScrollIndicator={false}
         onScroll={handleScroll}
         scrollEventThrottle={16}
         decelerationRate="fast"
+        snapToInterval={SLIDER_WIDTH + SLIDER_GAP}
+        snapToAlignment="start"
+        disableIntervalMomentum
+        contentContainerStyle={{ paddingHorizontal: (width - SLIDER_WIDTH) / 2 }}
       >
         {movies.slice(0, 5).map((movie, index) => (
           <View key={movie.id} style={styles.slide}>
@@ -110,10 +114,10 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
               <LinearGradient
                 colors={[
                   'transparent',
-                  'rgba(21,23,24,0.1)',
-                  'rgba(21,23,24,0.5)',
-                  'rgba(21,23,24,0.8)',
-                  '#151718',
+                  'rgba(10,10,10,0.3)',
+                  'rgba(10,10,10,0.7)',
+                  'rgba(10,10,10,0.9)',
+                  '#0A0A0A',
                 ]}
                 locations={[0, 0.5, 0.7, 0.85, 1]}
                 style={styles.gradient}
@@ -197,7 +201,7 @@ export function MovieSlider({ movies, onPressMovie, onPressPlay }: MovieSliderPr
             onPress={() => {
               setActiveIndex(index);
               scrollViewRef.current?.scrollTo({
-                x: index * SLIDER_WIDTH,
+                x: index * (SLIDER_WIDTH + SLIDER_GAP),
                 animated: true,
               });
             }}
@@ -225,6 +229,15 @@ const styles = StyleSheet.create({
     width: SLIDER_WIDTH,
     height: SLIDER_HEIGHT,
     position: 'relative',
+    marginRight: SLIDER_GAP,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 10,
   },
   slideContent: {
     width: '100%',
@@ -243,8 +256,8 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
-    paddingBottom: 60,
+    paddingHorizontal: 18,
+    paddingBottom: 56,
   },
   info: {
     maxWidth: '100%',
@@ -280,17 +293,16 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#fff',
     marginBottom: 8,
-    
     letterSpacing: -0.5,
   },
   metaContainer: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 8,
+    gap: 10,
+    marginBottom: 10,
   },
   metaItem: {
     flexDirection: 'row',
@@ -311,15 +323,15 @@ const styles = StyleSheet.create({
   actions: {
     flexDirection: 'row',
     gap: 10,
-    paddingTop:16
+    paddingTop: 10,
   },
   playButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 10,
     gap: 6,
     flex: 1,
     justifyContent: 'center',
@@ -332,10 +344,10 @@ const styles = StyleSheet.create({
   infoButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(109,109,110,0.7)',
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 6,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 10,
     gap: 6,
     flex: 1,
     justifyContent: 'center',
@@ -350,20 +362,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'absolute',
-    bottom: 24,
+    bottom: 18,
     left: 0,
     right: 0,
     gap: 6,
-    zIndex:999
+    zIndex: 999,
   },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: 'rgba(255,255,255,0.4)',
   },
   dotActive: {
     backgroundColor: '#e50914',
-    width: 28,
+    width: 20,
   },
 });

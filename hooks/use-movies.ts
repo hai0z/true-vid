@@ -9,11 +9,15 @@ export const useMovies = (page: number = 1) => {
   });
 };
 
-export const useMoviesByCategory = (categoryId: string, page: number = 1) => {
+export const useMoviesByCategory = (
+  categoryId: string,
+  page: number = 1,
+  enabled: boolean = true
+) => {
   return useQuery({
     queryKey: ['movies', 'category', categoryId, page],
     queryFn: () => movieService.getByCategory(categoryId, page),
-    enabled: categoryId !== 'all',
+    enabled: enabled && categoryId !== 'all',
   });
 };
 
@@ -33,7 +37,7 @@ export const useMovieDetail = (slug: string) => {
   });
 };
 
-export const useLatestMovies = (page: number = 1) => {
+export const useLatestMovies = (page: number = 1, enabled: boolean = true) => {
   return useQuery({
     queryKey: ['movies', 'latest', page],
     queryFn: async () => {
@@ -44,6 +48,7 @@ export const useLatestMovies = (page: number = 1) => {
       const data: NewApiRoot = await response.json();
       return convertNewApiResponseToApiResponse(data, 'vi');
     },
+    enabled,
   });
 };
 

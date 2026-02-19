@@ -11,6 +11,7 @@ import {
   Animated,
   Dimensions,
   GestureResponderEvent,
+  LayoutChangeEvent,
   Pressable,
   Image as RNImage,
   StyleSheet,
@@ -365,6 +366,9 @@ export function VideoControls({
   const seekValueRef = useRef(0);
   const seekPreviewPositionRef = useRef(0); // ✅ Chuyển từ state → ref
   const seekGuardRef = useRef<{ target: number; expireAt: number } | null>(null);
+  const sliderWidthRef = useRef(0);
+  const wasDraggingRef = useRef(false);
+  const tapAnimRef = useRef<number | null>(null);
 
   const originalSpeedRef = useRef(playbackSpeed);
   const longPressTimerRef = useRef<number | null>(null);
@@ -445,6 +449,7 @@ export function VideoControls({
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       if (doubleTapTimer.current) clearTimeout(doubleTapTimer.current);
+      if (tapAnimRef.current) cancelAnimationFrame(tapAnimRef.current);
     };
   }, []);
 
@@ -645,6 +650,7 @@ export function VideoControls({
   const handleSlidingStart = useCallback(
     (value: number) => {
       isSeekingRef.current = true;
+      wasDraggingRef.current = true;
       seekValueRef.current = clamp(value, 0, safeDuration);
       setIsSeeking(true);
       setSeekDisplayTime(seekValueRef.current);
@@ -695,6 +701,61 @@ export function VideoControls({
       resetHideTimer();
     },
     [safeDuration, onSeekComplete, resetHideTimer]
+  );
+
+  const handleSliderLayout = useCallback((event: LayoutChangeEvent) => {
+    sliderWidthRef.current = event.nativeEvent.layout.width;
+  }, []);
+
+  const handleSliderTap = useCallback(
+    (event: GestureResponderEvent) => {
+      if (isSeekingRef.current || wasDraggingRef.current) {
+        wasDraggingRef.current = false;
+        return;
+      }
+      const width = sliderWidthRef.current;
+      if (!width) return;
+      const x = clamp(event.nativeEvent.locationX, 0, width);
+      const target = (x / width) * safeDuration;
+      if (tapAnimRef.current) cancelAnimationFrame(tapAnimRef.current);
+      const startValue = sliderValue;
+      if (Math.abs(target - startValue) < 0.05) {
+        handleSlidingComplete(target);
+        return;
+      }
+      isSeekingRef.current = true;
+      setIsSeeking(true);
+      onSeekStart();
+      clearHideTimer();
+
+      const startTs = performance.now();
+      const durationMs = 160;
+
+      const step = (now: number) => {
+        const t = Math.min((now - startTs) / durationMs, 1);
+        const eased = t * (2 - t);
+        const value = startValue + (target - startValue) * eased;
+        seekValueRef.current = value;
+        setSeekDisplayTime(value);
+        seekPreviewPositionRef.current = (value / safeDuration) * 100;
+        processThumbnailSeek(value * 1000);
+        if (t < 1) {
+          tapAnimRef.current = requestAnimationFrame(step);
+        } else {
+          tapAnimRef.current = null;
+          handleSlidingComplete(target);
+        }
+      };
+      tapAnimRef.current = requestAnimationFrame(step);
+    },
+    [
+      safeDuration,
+      sliderValue,
+      onSeekStart,
+      clearHideTimer,
+      processThumbnailSeek,
+      handleSlidingComplete,
+    ]
   );
 
   // ── Thumbnail load ──
@@ -902,7 +963,7 @@ export function VideoControls({
             )}
 
             {/* Slider */}
-            <View style={styles.sliderContainer}>
+            <View style={styles.sliderContainer} onLayout={handleSliderLayout}>
               <View style={styles.progressTrackBackground} />
               <View style={[styles.bufferedBar, { width: bufferedPercent as any }]} />
               <Slider
@@ -913,6 +974,8 @@ export function VideoControls({
                 onSlidingStart={handleSlidingStart}
                 onValueChange={handleValueChange}
                 onSlidingComplete={handleSlidingComplete}
+                onTouchEnd={handleSliderTap}
+                tapToSeek
                 minimumTrackTintColor={NETFLIX_RED}
                 maximumTrackTintColor="transparent"
                 thumbTintColor={NETFLIX_RED}
@@ -1001,7 +1064,7 @@ const styles = StyleSheet.create({
 
   // ── Bottom ──
   bottomGradient: { justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 40 },
-  sliderContainer: { height: 30, justifyContent: 'center', marginBottom: 4 },
+  sliderContainer: { height: 30, justifyContent: 'center', marginBottom: 4, width: '90%', alignSelf: 'center' },
   slider: { width: '100%', height: 40, zIndex: 5 },
   progressTrackBackground: {
     position: 'absolute',
@@ -1023,6 +1086,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: -8,
+    width: '90%',
+    alignSelf: 'center',
   },
   timeContainer: { flexDirection: 'row', alignItems: 'center' },
   timeText: { color: '#fff', fontWeight: '700', fontSize: 13 },

@@ -34,7 +34,6 @@ export function MovieCard({
 }: MovieCardProps) {
   const isGrid = variant === 'grid';
   const scaleAnim = useRef(new Animated.Value(1)).current;
-
   // Animation logic
   const handlePressIn = () => {
     Animated.spring(scaleAnim, {
